@@ -1,0 +1,16 @@
+# Per-process env for the BLCA taxonomy steps (Nextflow builds this on first run).
+# clustalo here is built WITHOUT OpenMP on some platforms, so the workflow always
+# calls BLCA with -p 1 and parallelises across FASTA chunks instead.
+name: blca
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.9
+  - biopython
+  - clustalo
+  - blast>=2.14
+  - perl
+# Apple Silicon note: if `blast` won't solve for osx-arm64, build with
+# CONDA_SUBDIR=osx-64, or remove `blast` here and ensure a system blastn/
+# blastdbcmd is on PATH.

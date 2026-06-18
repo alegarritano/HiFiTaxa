@@ -1,0 +1,25 @@
+# Per-process env for the QIIME2 / DADA2 denoising + QC steps.
+#
+# QIIME2 is platform-specific and cannot be reliably resolved in a generic
+# cross-platform spec, so this file is a thin pointer to the official QIIME2
+# amplicon distribution plus the two extra tools the QC steps need
+# (seqkit, csvtk). On Linux, Nextflow can build it with `-profile conda`.
+#
+# On macOS (esp. Apple Silicon) the most reliable path is to REUSE an existing
+# QIIME2 amplicon env instead of building this one, by passing:
+#     --qiime2_env /path/to/conda/envs/qiime2-amplicon-2024.10
+# (that env must also contain seqkit + csvtk; add with:
+#     mamba install -n qiime2-amplicon-2024.10 -c bioconda --freeze-installed seqkit csvtk)
+#
+# A fully-pinned Linux lock of the validated 2024.10 env is kept alongside as
+# qiime2-amplicon.linux-lock.yml for reproducible Linux installs.
+name: qiime2-amplicon
+channels:
+  - https://packages.qiime2.org/qiime2/2024.10/amplicon/released
+  - conda-forge
+  - bioconda
+dependencies:
+  - qiime2-amplicon=2024.10
+  - seqkit
+  - csvtk
+  - jq

@@ -1,0 +1,11 @@
+# Conda env for the Emu classifier branch (used by -profile standard / conda).
+# Containerized profiles (docker / singularity) pull `emu_container` instead.
+name: hifitax_emu
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.10
+  - emu>=3.6.2
+  - minimap2>=2.24
+  - samtools>=1.17

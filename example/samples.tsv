@@ -1,0 +1,9 @@
+sample-id	absolute-filepath
+bc1005_bc1056	example/fastq/demultiplex.16S_For_bc1005--16S_Rev_bc1056.hifi_reads.fastq.gz
+bc1005_bc1057	example/fastq/demultiplex.16S_For_bc1005--16S_Rev_bc1057.hifi_reads.fastq.gz
+bc1005_bc1062	example/fastq/demultiplex.16S_For_bc1005--16S_Rev_bc1062.hifi_reads.fastq.gz
+bc1005_bc1075	example/fastq/demultiplex.16S_For_bc1005--16S_Rev_bc1075.hifi_reads.fastq.gz
+bc1005_bc1100	example/fastq/demultiplex.16S_For_bc1005--16S_Rev_bc1100.hifi_reads.fastq.gz
+bc1007_bc1075	example/fastq/demultiplex.16S_For_bc1007--16S_Rev_bc1075.hifi_reads.fastq.gz
+bc1020_bc1059	example/fastq/demultiplex.16S_For_bc1020--16S_Rev_bc1059.hifi_reads.fastq.gz
+bc1024_bc1111	example/fastq/demultiplex.16S_For_bc1024--16S_Rev_bc1111.hifi_reads.fastq.gz

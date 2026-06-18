@@ -1,0 +1,46 @@
+name: build-blca-image
+
+# Builds the BLCA runtime image and pushes it to GitHub Container Registry (GHCR)
+# at ghcr.io/<owner>/hifitax. Set params.blca_container (or --blca_container) to
+# that path to use it with -profile docker / -profile singularity.
+
+on:
+  push:
+    tags: ['v*']
+    paths: ['envs/Dockerfile', '.github/workflows/build-blca-image.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase owner
+        id: o
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: envs/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ steps.o.outputs.owner }}/hifitax:1.0.0
+            ghcr.io/${{ steps.o.outputs.owner }}/hifitax:latest

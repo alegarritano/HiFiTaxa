@@ -1,0 +1,31 @@
+# Built GTDB BLCA database(s) (large; (re)built by the preflight / build script)
+db/
+db_*/
+ssu_all_r*.fna.gz
+
+# Nextflow run artifacts
+work/
+.nextflow/
+.nextflow.log*
+results/
+pipeline_trace.txt
+execution_*.html
+singularity_cache/
+apptainer_cache/
+apptainer_tmp/
+
+# generated at runtime
+example_test_results/
+.first_run_complete
+# user reads + the sample sheets generated from them (root level only;
+# example/samples.tsv stays tracked)
+00_Reads/
+/samples.tsv
+/metadata.tsv
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store

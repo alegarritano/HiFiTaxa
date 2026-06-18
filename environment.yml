@@ -1,0 +1,25 @@
+# Main driver environment for HiFiTaxa.
+# Install locally with mamba (no channel/package needed):
+#     mamba env create -f environment.yml
+#     mamba activate HiFiTaxa
+#
+# This env runs the launcher (run_pipeline.py), the GTDB preflight check, the
+# GTDB-database build (makeblastdb), and Nextflow itself. The per-process
+# bioinformatics tools (QIIME2/DADA2, clustalo, blastn) live in the per-step
+# conda envs that Nextflow creates on first run (see envs/).
+name: HiFiTaxa
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.10
+  - nextflow>=24.10,<25      # pinned <25: v26 strict-config parser breaks the workflow config
+  - tqdm                      # Snakemake-style progress bar in the launcher
+  - requests                  # GTDB version check / download in preflight
+  - pigz
+  - curl
+  - gawk
+  - blast>=2.14               # makeblastdb for building the GTDB BLCA DB
+  # NOTE (Apple Silicon / osx-arm64): if `blast` fails to solve, create this env
+  # with `CONDA_SUBDIR=osx-64 mamba env create -f environment.yml`, or rely on a
+  # system BLAST on PATH (the build step only needs `makeblastdb`).
