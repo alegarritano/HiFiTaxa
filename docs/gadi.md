@@ -36,19 +36,11 @@ conda activate HiFiTaxa
 source set_apptainer_cache.sh    # repo-local image + temp caches (keeps them off $HOME)
 ```
 
-### 4. Download and build the GTDB database
+### 4. Compile all container images
 
-```bash
-bash bin/build_gtdb_blca_db.sh 232 db 1000   # download + parse + BLAST-index GTDB SSU r232
-```
-
-If you'll use `--classifier emu` or `nb`, also build those references now (they
-reuse the files above and need no internet — see [databases.md](databases.md)).
-
-### 5. Compile all container images
-
-Compute nodes can't pull images, so cache them here. Pull each into the
-repo-local cache (full list and exact filenames in [offline.md](offline.md)):
+Compute nodes can't pull images, so cache them here **first** — the Emu database
+build in the next step reuses the Emu image. Pull each into the repo-local cache
+(full list and exact filenames in [offline.md](offline.md)):
 
 ```bash
 cd "$NXF_SINGULARITY_CACHEDIR"
@@ -62,9 +54,17 @@ singularity pull 'quay.io-biocontainers-emu@sha256-61ea3336f12d41930d73e57ce1b04
 cd -
 ```
 
-The BLCA image is the default `params.blca_container`
-(`ghcr.io/alegarritano/hifitax:1.0.0`) — no need to set anything unless you
-override it with `--blca_container`.
+### 5. Download and build the GTDB database
+
+```bash
+bash bin/build_gtdb_db.sh 232 db
+```
+
+This downloads and parses GTDB **once**, then asks whether to drop sequences
+shorter than 1000 bp and which formats to build — **BLCA**, **NB**, **Emu**.
+Build the ones matching the `--classifier` you'll run. BLCA and NB build with the
+driver env; the Emu database build reuses the Emu image you cached in step 4.
+All of this needs internet, so do it here on the login node.
 
 ## In an interactive job (offline)
 

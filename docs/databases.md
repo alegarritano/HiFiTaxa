@@ -6,6 +6,22 @@ All three classifiers share one GTDB reference build (default release r232). On
 the first run the preflight builds it automatically; the sections below cover
 pinning a release and building each reference by hand.
 
+## Build everything interactively
+
+`bash bin/build_gtdb_db.sh [release] [db-dir]` downloads and parses GTDB **once**,
+then asks four questions — drop sequences <1000 bp, and whether to format for
+**BLCA**, **NB**, and **Emu** — and builds only the formats you choose:
+
+```
+bash bin/build_gtdb_db.sh 232 db
+```
+
+Handy for preparing the database by hand (e.g. on an HPC login node before an
+offline run). BLCA and NB build with the driver env (`makeblastdb`, `python`);
+the Emu build needs `emu`, so it runs inside the Emu container if `emu` is not on
+PATH. The per-format scripts below are the non-interactive primitives this
+builder (and the launcher) call.
+
 ## BLCA database
 
 Lives in `--gtdb_db_dir` (default `db/`): `gtdb_ssu_BLCAparsed.fasta` with its

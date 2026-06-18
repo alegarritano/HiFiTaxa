@@ -10,6 +10,10 @@
 #   gtdb_ssu_BLCAparsed.taxonomy     accession <TAB> superkingdom:..;...;species:..;
 #   GTDB_VERSION.txt                 the release number
 #
+# env SKIP_BLAST=1: parse only -> write the FASTA + taxonomy but skip makeblastdb.
+#            NB and Emu only need the parsed FASTA + taxonomy, not the BLAST index;
+#            bin/build_gtdb_db.sh sets this when BLCA formatting was not requested.
+#
 # Needs: curl, gzip, awk, makeblastdb (BLAST+) on PATH.
 set -euo pipefail
 
@@ -93,6 +97,9 @@ gzip -dc "$RAW" | awk -v FASTA="$FASTA" -v TAX="$TAX" -v MINLEN="$MINLEN" \
   }
 '
 
+if [ "${SKIP_BLAST:-0}" = 1 ]; then
+  echo "${C_INFO}[build] SKIP_BLAST=1 — parse only: wrote FASTA + taxonomy, skipping makeblastdb (no BLAST index)${C_RST}"
+else
 echo "${C_INFO}[build] makeblastdb (-parse_seqids) — building BLAST index…${C_RST}"
 mblog=$(mktemp)
 makeblastdb -in "$FASTA" -dbtype nucl -parse_seqids -out "$FASTA" >"$mblog" 2>&1 &
@@ -112,6 +119,7 @@ if wait "$mbpid"; then
 else
   [ "$TTY" = 1 ] && printf "\r\033[K" >&2
   echo "${C_WARN}[build] makeblastdb FAILED:${C_RST}" >&2; cat "$mblog" >&2; rm -f "$mblog"; exit 1
+fi
 fi
 
 echo "$REL" > "$DBDIR/GTDB_VERSION.txt"
