@@ -64,6 +64,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$OUT_DIR"
 STAGE="${OUT_DIR}/_emu_stage"
 mkdir -p "$STAGE"
+# Absolutise STAGE: the emu build below cd's into OUT_DIR, after which a relative
+# STAGE would resolve wrong (realpath returns '' -> emu gets an empty path and
+# crashes). Absolute STAGE is cwd-proof, so a relative <out_dir> works too.
+STAGE="$(cd "$STAGE" && pwd)"
 
 echo "[emu-db] 1/3 preparing Emu-format inputs from GTDB BLCA-parsed files"
 python3 "$HERE/_prepare_emu_inputs.py" \

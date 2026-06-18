@@ -43,9 +43,9 @@ if ask "Remove reference sequences shorter than 1000 bp? (recommended for full-l
 else
   MINLEN=0
 fi
-ask "Format for BLCA?              (BLAST index)"                        && DO_BLCA=1 || DO_BLCA=0
-ask "Format for the NB classifier? (DADA2 genus + species references)"  && DO_NB=1   || DO_NB=0
-ask "Format for Emu?"                                                    && DO_EMU=1  || DO_EMU=0
+ask "Format the database for BLCA?"               && DO_BLCA=1 || DO_BLCA=0
+ask "Format the database for the NB classifier?"  && DO_NB=1   || DO_NB=0
+ask "Format the database for Emu?"                && DO_EMU=1  || DO_EMU=0
 echo
 
 if [ "$DO_BLCA$DO_NB$DO_EMU" = "000" ]; then
