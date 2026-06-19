@@ -26,14 +26,19 @@ source /scratch/<proj>/$USER/miniforge3/etc/profile.d/conda.sh
 module load singularity
 ```
 
-### 3. Install HiFiTaxa and its driver env
+### 3. Install HiFiTaxa, its driver env, and the Nextflow runtime
 
 ```bash
 git clone https://github.com/alegarritano/HiFiTaxa.git
 cd HiFiTaxa
 mamba env create -f environment.yml
 conda activate HiFiTaxa
-source set_apptainer_cache.sh    # repo-local image + temp caches (keeps them off $HOME)
+source set_apptainer_cache.sh         # repo-local image + temp caches (keeps them off $HOME)
+
+# Cache the pinned Nextflow runtime + any plugins here, so the offline compute
+# node has them. NXF_HOME on /scratch is shared with the compute node.
+export NXF_HOME="$PWD/.nextflow"
+NXF_VER=24.10.9 nextflow info         # downloads the Nextflow runtime into NXF_HOME
 ```
 
 ### 4. Compile all container images
@@ -85,6 +90,8 @@ module load singularity
 cd /scratch/<proj>/$USER/HiFiTaxa
 conda activate HiFiTaxa
 source set_apptainer_cache.sh
+export NXF_HOME="$PWD/.nextflow"      # the Nextflow runtime you cached on the login node
+export NXF_OFFLINE=true               # don't reach the network for Nextflow plugins/updates
 
 python bin/run_pipeline.py \
   --input samples.tsv --metadata metadata.tsv \
@@ -94,6 +101,6 @@ python bin/run_pipeline.py \
   --outdir results
 ```
 
-`--skip-gtdb-check` (database already built) + the pre-cached images mean the run
-never needs the network. Run from `/scratch` so Nextflow's `work/` lands there,
-not on your home quota.
+`--skip-gtdb-check` (database already built), the pre-cached images, and the
+cached `NXF_HOME` + `NXF_OFFLINE=true` mean the run never needs the network. Run
+from `/scratch` so Nextflow's `work/` lands there, not on your home quota.

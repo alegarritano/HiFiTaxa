@@ -38,11 +38,33 @@ ask() {  # ask "question"  -> 0 = yes (default), 1 = no
 echo "=== HiFiTaxa GTDB database builder — release r${REL} ==="
 echo
 
-if ask "Remove reference sequences shorter than 1000 bp? (recommended for full-length 16S)"; then
-  MINLEN=1000
-else
-  MINLEN=0
+FASTA="$DBDIR/gtdb_ssu_BLCAparsed.fasta"
+TAX="$DBDIR/gtdb_ssu_BLCAparsed.taxonomy"
+
+# Reuse an existing GTDB build if one is already present, so we don't re-download
+# ~3 GB needlessly. Answer no to fetch/rebuild release r${REL} (pass a different
+# number on the command line to update to another release).
+REBUILD=1
+if [ -f "$FASTA" ] && [ -f "$TAX" ]; then
+  have_rel="$(cat "$DBDIR/GTDB_VERSION.txt" 2>/dev/null || echo '?')"
+  echo "Found an existing GTDB build in ${DBDIR}/ (release r${have_rel})."
+  echo "(To fetch a different release, re-run with its number, e.g. 'bash bin/build_gtdb_db.sh 233 ${DBDIR}'.)"
+  if ask "Reuse it as-is and skip the download?"; then
+    REBUILD=0
+  fi
+  echo
 fi
+
+# The length filter only matters when (re)building.
+MINLEN=1000
+if [ "$REBUILD" = 1 ]; then
+  if ask "Remove reference sequences shorter than 1000 bp? (recommended for full-length 16S)"; then
+    MINLEN=1000
+  else
+    MINLEN=0
+  fi
+fi
+
 ask "Format the database for BLCA?"               && DO_BLCA=1 || DO_BLCA=0
 ask "Format the database for the NB classifier?"  && DO_NB=1   || DO_NB=0
 ask "Format the database for Emu?"                && DO_EMU=1  || DO_EMU=0
@@ -53,16 +75,23 @@ if [ "$DO_BLCA$DO_NB$DO_EMU" = "000" ]; then
   exit 0
 fi
 
-FASTA="$DBDIR/gtdb_ssu_BLCAparsed.fasta"
-TAX="$DBDIR/gtdb_ssu_BLCAparsed.taxonomy"
-
-# 1) Shared download + parse. Build the BLAST index only if BLCA was requested;
-#    NB and Emu only need the parsed FASTA + taxonomy.
-echo ">>> downloading + parsing GTDB SSU r${REL} into ${DBDIR}/"
-if [ "$DO_BLCA" = 1 ]; then
-  bash "$HERE/build_gtdb_blca_db.sh" "$REL" "$DBDIR" "$MINLEN"
+# 1) Download + parse GTDB (unless reusing). Build the BLAST index only if BLCA
+#    is requested; NB and Emu only need the parsed FASTA + taxonomy.
+if [ "$REBUILD" = 1 ]; then
+  echo ">>> downloading + parsing GTDB SSU r${REL} into ${DBDIR}/"
+  if [ "$DO_BLCA" = 1 ]; then
+    bash "$HERE/build_gtdb_blca_db.sh" "$REL" "$DBDIR" "$MINLEN"
+  else
+    SKIP_BLAST=1 bash "$HERE/build_gtdb_blca_db.sh" "$REL" "$DBDIR" "$MINLEN"
+  fi
 else
-  SKIP_BLAST=1 bash "$HERE/build_gtdb_blca_db.sh" "$REL" "$DBDIR" "$MINLEN"
+  echo ">>> reusing existing GTDB parse in ${DBDIR}/"
+  # If BLCA is wanted but the reused build has no BLAST index, create it in place
+  # (no re-parse, so the existing FASTA is left untouched).
+  if [ "$DO_BLCA" = 1 ] && ! ls "$FASTA".n* >/dev/null 2>&1; then
+    echo "    existing build has no BLAST index — running makeblastdb"
+    makeblastdb -in "$FASTA" -dbtype nucl -parse_seqids -out "$FASTA"
+  fi
 fi
 
 # 2) NB references (python only — no container, no internet).
