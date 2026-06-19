@@ -22,6 +22,11 @@ the Emu build needs `emu`, so it runs inside the Emu container if `emu` is not o
 PATH. The per-format scripts below are the non-interactive primitives this
 builder (and the launcher) call.
 
+**Timing (~5–10 min total):** GTDB download + BLCA parse/index ~2–3 min (~76 MB
+download, ~957k sequences kept after the 1000 bp filter), NB references ~1–2 min,
+Emu database ~2–3 min. (Database builds are quick — the slow first-run step is
+converting the container images to SIFs; see [offline.md](offline.md).)
+
 ## BLCA database
 
 Lives in `--gtdb_db_dir` (default `db/`): `gtdb_ssu_BLCAparsed.fasta` with its

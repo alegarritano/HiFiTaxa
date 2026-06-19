@@ -491,6 +491,9 @@ def prepull_images(args, passthrough):
         cache_dir = os.environ.get("NXF_SINGULARITY_CACHEDIR", os.path.join(os.getcwd(), "singularity_cache"))
         print(f"[images] pre-pulling {len(imgs)} image(s) into {cache_dir} "
               f"(once; re-used on later runs)")
+        print("[images] NOTE: the first build converts each image to a SIF, which is slow "
+              "on HPC shared filesystems -- roughly QIIME2 ~45 min, pb-16s-nf-tools ~15 min, "
+              "BLCA ~5 min (~1 h total). One-time: later runs reuse the cache.")
         for img in imgs:
             # Match Nextflow's Singularity cache filename so it re-uses our file
             # instead of pulling again: strip protocol, ':' and '/' -> '-', + .img

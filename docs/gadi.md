@@ -45,7 +45,12 @@ NXF_VER=24.10.9 nextflow info         # downloads the Nextflow runtime into NXF_
 
 Compute nodes can't pull images, so cache them here **first** — the Emu database
 build in the next step reuses the Emu image. Pull each into the repo-local cache
-(full list and exact filenames in [offline.md](offline.md)):
+(full list and exact filenames in [offline.md](offline.md)).
+
+> **Budget ~1–1.5 h on the first build** (one-time; cached after). The downloads
+> are fast — the slow part is Apptainer converting each image to a `.sif` on
+> `/scratch`: roughly QIIME2 amplicon **~45 min**, pb-16s-nf-tools **~15 min**,
+> BLCA **~5 min**, Emu **~5 min**.
 
 ```bash
 cd "$NXF_SINGULARITY_CACHEDIR"
@@ -70,6 +75,9 @@ shorter than 1000 bp and which formats to build — **BLCA**, **NB**, **Emu**.
 Build the ones matching the `--classifier` you'll run. BLCA and NB build with the
 driver env; the Emu database build reuses the Emu image you cached in step 4.
 All of this needs internet, so do it here on the login node.
+
+Quick (~5–10 min total): the GTDB download + BLCA parse/index is ~2–3 min, the
+NB references ~1–2 min, and the Emu database ~2–3 min.
 
 ## In an interactive job (offline)
 

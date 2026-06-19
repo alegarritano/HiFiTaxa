@@ -7,12 +7,19 @@ images cannot be pulled at run time. The fix is to download them **once on a
 login node that does have internet**, into a persistent cache, then point every
 later run at that same cache. The pipeline uses these images:
 
-| Image | Used by | Pulled when |
-|-------|---------|-------------|
-| `kpinpb/pb-16s-nf-tools:latest` | QC / import | always |
-| `quay.io/qiime2/amplicon@sha256:4038fd785bf4e76ddd6ec7a7f57abe94cdca6c5cd0a93d0924971a74eabd7cf2` | denoising, NB | always |
-| `ghcr.io/alegarritano/hifitax:1.0.0` | BLCA steps (`params.blca_container`) | `--classifier` includes `blca` (default) |
-| `quay.io/biocontainers/emu@sha256:61ea3336f12d41930d73e57ce1b041bce48d66b4011a165bf1f0efce9d684777` | Emu steps (`params.emu_container`) | `--classifier` includes `emu` |
+| Image | Used by | Download | First build → SIF |
+|-------|---------|----------|-------------------|
+| `quay.io/qiime2/amplicon@sha256:4038…` | denoising, NB (always) | ~2.1 GB | **~45 min** |
+| `kpinpb/pb-16s-nf-tools:latest` | QC / import (always) | ~1.5 GB | ~15 min |
+| `ghcr.io/alegarritano/hifitax:1.0.0` | BLCA — `--classifier blca` (default) | ~350 MB | ~5 min |
+| `quay.io/biocontainers/emu@sha256:61ea…` | Emu — `--classifier emu` | ~320 MB | ~5 min |
+
+**Budget ~1–1.5 h for the full set on the first run.** The downloads are quick;
+the slow part is Apptainer/Singularity converting each image to a `.sif` on a
+shared HPC filesystem (the times above are from NCI-style `/scratch`). It is
+**one-time** — the SIFs are cached in `NXF_SINGULARITY_CACHEDIR` and reused
+instantly on every later run. (The full image digests are in the pull commands
+below.)
 
 ## Easiest: let the first run pull them on a login node
 
