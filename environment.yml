@@ -15,7 +15,6 @@ dependencies:
   - python>=3.10
   - nextflow>=24.10,<25      # pinned <25: v26 strict-config parser breaks the workflow config
   - tqdm                      # Snakemake-style progress bar in the launcher
-  - requests                  # GTDB version check / download in preflight
   - pigz
   - curl
   - gawk

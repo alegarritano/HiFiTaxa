@@ -26,11 +26,11 @@ def msg(s): print(f"[gtdb-preflight] {s}", flush=True)
 
 def fetch_latest_release(timeout):
     """Return latest GTDB release number (int) or None if unreachable."""
+    import urllib.request
     try:
-        import requests
-        r = requests.get(LATEST_VERSION_URL, timeout=timeout)
-        r.raise_for_status()
-        m = re.search(r"v?(\d+)", r.text.strip().splitlines()[0])
+        with urllib.request.urlopen(LATEST_VERSION_URL, timeout=timeout) as r:
+            text = r.read().decode("utf-8", "replace")
+        m = re.search(r"v?(\d+)", text.strip().splitlines()[0])
         return int(m.group(1)) if m else None
     except Exception as e:
         msg(f"could not reach GTDB website ({e.__class__.__name__}: {e}).")
