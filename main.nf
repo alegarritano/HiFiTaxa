@@ -31,28 +31,43 @@ include { nb_classify; nb_classify_fasta; nb_classify_singlestep } from './modul
 include { itsx_extract } from './modules/itsx'
 include { emits_classify } from './modules/taxonomy_emits'
 
+// ---- marker awareness (resolved before classifier so defaults can depend on it) ----
+// marker drives primers, length window, reference DB, read-prep, NB design and the
+// read-level EM classifier. Default '16S' keeps the classic GTDB behaviour; 'ITS'
+// switches the whole fungal path on.
+def MARKER = params.marker.toString().toUpperCase().trim()
+if (!(MARKER in ['16S', 'ITS'])) {
+    exit 1, "ERROR: unknown --marker '${params.marker}'; must be '16S' or 'ITS'."
+}
+def is_its = (MARKER == 'ITS')
+
 // ---- classifier selection ------------------------------------------------
 // --classifier accepts a single name, a comma-separated list, or the shorthands
-// 'all' (== blca,emu,nb) and 'both' (== blca,emu, kept for back-compat).
-// The QIIME2 Naive-Bayes branch is canonically 'qiime2_nb'; 'nb', 'dada2_nb',
-// 'qiime2-nb', 'dada2-nb' are accepted aliases (internally normalized to 'nb').
+// 'all' (== blca,emu,nb) and 'both' (== blca,emu, kept for back-compat). The
+// read-level EM classifier is 'emu' for 16S and 'emits' for ITS (same slot);
+// 'emits' is an accepted alias. The QIIME2 Naive-Bayes branch is canonically
+// 'qiime2_nb'; 'nb', 'dada2_nb', 'qiime2-nb', 'dada2-nb' are aliases (-> 'nb').
+// Default is marker-aware: 16S -> blca (ASV path); ITS -> emits (read-level,
+// paired with itsxrust). The DADA2/ASV steps run only when blca or nb is asked.
 def VALID_CLASSIFIERS = ['blca', 'emu', 'nb']
 def NB_ALIASES        = ['nb', 'dada2_nb', 'dada2-nb', 'qiime2_nb', 'qiime2-nb']
-def _raw = params.classifier.toString().toLowerCase().trim()
+def EMITS_ALIASES     = ['emits']
+def _raw = (params.classifier ?: (is_its ? 'emits' : 'blca')).toString().toLowerCase().trim()
 def selected
 if (_raw == 'all')       selected = ['blca', 'emu', 'nb']
 else if (_raw == 'both') selected = ['blca', 'emu']
 else                     selected = _raw.split(',').collect { it.trim() }
-selected = selected.collect { it in NB_ALIASES ? 'nb' : it }
+selected = selected.collect { it in NB_ALIASES ? 'nb' : (it in EMITS_ALIASES ? 'emu' : it) }
 selected.each {
     if (!(it in VALID_CLASSIFIERS)) {
-        exit 1, "ERROR: unknown classifier '${it}'; must be one of ${VALID_CLASSIFIERS} " +
-                "(or NB aliases ${NB_ALIASES}), or shorthand 'all' / 'both'."
+        exit 1, "ERROR: unknown classifier '${it}'; must be one of blca, ${is_its ? 'emits' : 'emu'}, nb " +
+                "(or shorthand 'all' / 'both')."
     }
 }
 def run_blca = 'blca' in selected
 def run_emu  = 'emu'  in selected
 def run_nb   = 'nb'   in selected
+def selected_display = selected.collect { (it == 'emu' && is_its) ? 'emits' : it }
 
 // ---- dynamic parameters --------------------------------------------------
 if (params.input) {
@@ -77,15 +92,7 @@ if (params.skip_primer_trim) {
     dynamic_forward_primer = params.forward_primer; dynamic_reverse_primer = params.reverse_primer; trim_cutadapt = "Yes"
 }
 
-// ---- marker awareness ----------------------------------------------------
-// marker drives primers, length window, reference DB, read-prep, NB design and
-// the read-level EM classifier. Validate up front; default '16S' keeps the
-// classic GTDB behaviour, 'ITS' switches the whole fungal path on.
-def MARKER = params.marker.toString().toUpperCase().trim()
-if (!(MARKER in ['16S', 'ITS'])) {
-    exit 1, "ERROR: unknown --marker '${params.marker}'; must be '16S' or 'ITS'."
-}
-def is_its = (MARKER == 'ITS')
+// ---- marker-derived display names (MARKER / is_its resolved above) --------
 def reference_name = is_its ? 'UNITE (db_unite)' : 'GTDB (db)'
 def read_em_name   = is_its ? 'EMITS' : 'Emu'
 def nb_design_name = is_its ? 'single-step (7-rank assignTaxonomy, no addSpecies)'
@@ -104,7 +111,7 @@ log_text = """
   Trim primers (cutadapt):   $trim_cutadapt
   Forward primer:            $params.forward_primer
   Reverse primer:            $params.reverse_primer
-  Classifier(s):             ${selected.join(',')}
+  Classifier(s):             ${selected_display.join(',')}
   NB design:                 $nb_design_name
   Read-level EM classifier:  $read_em_name
   --- DADA2 (needed for BLCA + NB) ---
@@ -160,7 +167,7 @@ workflow {
         // itsxrust-extracted reads.
         def reads_for_import_skip
         if (is_its) {
-            itsx_extract(QC_fastq.out.filtered_fastq)
+            itsx_extract(QC_fastq.out.filtered_fastq, file(params.itsx_hmm))
             reads_for_import_skip = itsx_extract.out.fastq
             filtered_fastq_files  = itsx_extract.out.fastq.map { sid, fq -> fq }
             reads_for_emu         = itsx_extract.out.fastq   // EMITS on itsxrust-extracted reads (default)
@@ -168,7 +175,7 @@ workflow {
             reads_for_import_skip = QC_fastq.out.filtered_fastq
             filtered_fastq_files  = QC_fastq.out.filtered_fastq_files
         }
-        if (run_blca) {
+        if (run_blca || run_nb) {
             prepare_qiime2_manifest_skip_cutadapt(reads_for_import_skip.collect(), metadata_file)
             qiime2_manifest = prepare_qiime2_manifest_skip_cutadapt.out.sample_trimmed_file.flatten()
             import_qiime2(qiime2_manifest, filtered_fastq_files.collect())
@@ -184,7 +191,7 @@ workflow {
         //    directly, since minimap2 soft-clips the primer ends.
         def reads_for_import
         if (is_its) {
-            itsx_extract(QC_fastq.out.filtered_fastq)
+            itsx_extract(QC_fastq.out.filtered_fastq, file(params.itsx_hmm))
             reads_for_import     = itsx_extract.out.fastq
             filtered_fastq_files = itsx_extract.out.fastq.map { sid, fq -> fq }
             reads_for_emu        = itsx_extract.out.fastq            // EMITS on the itsxrust ITS-extracted reads
@@ -197,7 +204,7 @@ workflow {
             filtered_fastq_files = cutadapt.out.cutadapt_fastq_files
             reads_for_emu        = QC_fastq.out.filtered_fastq       // Emu on the QC reads (no cutadapt)
         }
-        if (run_blca) {
+        if (run_blca || run_nb) {
             prepare_qiime2_manifest(reads_for_import.collect(), metadata_file)
             qiime2_manifest = prepare_qiime2_manifest.out.sample_trimmed_file.flatten()
             import_qiime2(qiime2_manifest, filtered_fastq_files.collect())

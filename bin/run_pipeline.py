@@ -100,14 +100,22 @@ def welcome_wizard(args):
     is_its = (getattr(args, "marker", "16S") == "ITS")
 
     if is_its:
-        # ---- ITS: fixed fungal classifier set --------------------------------
+        # ---- ITS: EMITS (read-level, paired with itsxrust) is the default. ----
+        # The DADA2/ASV classifiers (BLCA, single-step NB) are opt-in, so DADA2
+        # only runs for fungi when you explicitly ask for it.
         print()
-        print("Marker = ITS (fungal): classifiers default to BLCA + single-step")
-        print("    Naive-Bayes (nb) + EMITS read-level profiler. Emu and the 16S")
-        print("    two-step NB do not apply to ITS, so those prompts are skipped.")
+        print("Marker = ITS (fungal): EMITS (read-level, on itsxrust-extracted reads)")
+        print("    is the default. Emu and the 16S two-step NB do not apply to ITS.")
         use_emu = False           # Emu is 16S-only
-        use_nb = True             # ITS single-step NB
-        args.classifier = "blca,nb,emits"
+        branches = ["emits"]
+        print()
+        print("Q3. Also run the DADA2/ASV fungal classifiers? (each adds the DADA2 denoise step)")
+        if _ask_yn("Add BLCA (ASVs vs UNITE)?", default="n"):
+            branches.append("blca")
+        if _ask_yn("Add single-step Naive-Bayes (ASVs vs UNITE)?", default="n"):
+            branches.append("nb")
+        use_nb = ("nb" in branches)
+        args.classifier = ",".join(branches)
     else:
         # ---- Q3: Emu -----------------------------------------------------------
         print()
