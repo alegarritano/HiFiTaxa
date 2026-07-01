@@ -109,6 +109,20 @@ EMITS steps also need their images cached in step 4: pull
 Quick (~2–5 min): the ~29 MB download plus the BLCA parse/index and the two
 reformatted references.
 
+### 5c. Warm the ITS conda envs (ITS marker only)
+
+The fungal itsxrust and EMITS steps run via small conda envs that bundle nhmmer +
+minimap2, not the images (the upstream images lack `ps` and nhmmer). Nextflow builds
+them from `envs/itsxrust.yml` / `envs/emits.yml` on first use, so build them here on
+the login node (internet) and the offline job reuses them:
+
+```
+source set_apptainer_cache.sh                 # sets NXF_CONDA_CACHEDIR (repo-local, shared with the job)
+nextflow run . -profile test_its,singularity  # first run builds the two envs + validates the ITS path
+```
+
+No `module load hmmer`, no extra `-c` config: nhmmer ships inside the conda env.
+
 ## In an interactive job (offline)
 
 ### 6. Request the job
