@@ -62,6 +62,12 @@ singularity pull ghcr.io-alegarritano-hifitax-1.0.0.img docker://ghcr.io/alegarr
 singularity pull 'quay.io-biocontainers-emu@sha256-61ea3336f12d41930d73e57ce1b041bce48d66b4011a165bf1f0efce9d684777.img' \
   docker://quay.io/biocontainers/emu@sha256:61ea3336f12d41930d73e57ce1b041bce48d66b4011a165bf1f0efce9d684777
 cd -
+
+# ITS marker only: itsxrust + EMITS run via conda (not images, which lack ps/nhmmer),
+# so build their two envs here in the same prep phase. The pipeline auto-detects
+# conda_envs/<tool> and uses it; the offline compute node then needs no build.
+mamba env create -f envs/itsxrust.yml -p "$PWD/conda_envs/itsxrust"
+mamba env create -f envs/emits.yml    -p "$PWD/conda_envs/emits"
 ```
 
 ### 5. Download and build the GTDB database
@@ -103,25 +109,22 @@ bash bin/build_emits_db.sh       "$FASTA" db_unite
 This builds all three UNITE references (BLCA + single-step NB + EMITS) into
 `db_unite/`, all with the driver env (`makeblastdb`, `python3`), no container
 needed. It needs internet, so do it here on the login node. (The itsxrust and
-EMITS steps also need their images cached in step 4: pull
-`ghcr.io/ayobi/itsxrust:latest` and, for EMITS, `ghcr.io/ayobi/emits:latest`.)
+EMITS steps run from the conda envs you built in step 4, not from images.)
 
 Quick (~2–5 min): the ~29 MB download plus the BLCA parse/index and the two
 reformatted references.
 
-### 5c. Warm the ITS conda envs (ITS marker only)
+### 5c. (ITS) validate on the login node — optional
 
-The fungal itsxrust and EMITS steps run via small conda envs that bundle nhmmer +
-minimap2, not the images (the upstream images lack `ps` and nhmmer). Nextflow builds
-them from `envs/itsxrust.yml` / `envs/emits.yml` on first use, so build them here on
-the login node (internet) and the offline job reuses them:
+The itsxrust + EMITS conda envs were built in step 4, and the pipeline auto-detects
+`conda_envs/<tool>`, so nothing extra is needed at run time — nhmmer ships inside
+the env. To confirm the whole ITS path before submitting, run the bundled mock
+once here:
 
 ```
-source set_apptainer_cache.sh                 # sets NXF_CONDA_CACHEDIR (repo-local, shared with the job)
-nextflow run . -profile test_its,singularity  # first run builds the two envs + validates the ITS path
+source set_apptainer_cache.sh
+nextflow run . -profile test_its,singularity
 ```
-
-No `module load hmmer`, no extra `-c` config: nhmmer ships inside the conda env.
 
 ## In an interactive job (offline)
 
@@ -156,3 +159,14 @@ python bin/run_pipeline.py \
 `--skip-gtdb-check` (database already built), the pre-cached images, and the
 cached `NXF_HOME` + `NXF_OFFLINE=true` mean the run never needs the network. Run
 from `/scratch` so Nextflow's `work/` lands there, not on your home quota.
+
+**Fungal ITS:** add `--marker ITS`. EMITS (read-level, paired with itsxrust) is the
+default classifier, so DADA2 does not run unless you also add `--classifier blca`
+or `nb`:
+
+```bash
+python bin/run_pipeline.py --marker ITS \
+  --input samples.tsv --metadata metadata.tsv \
+  --skip-gtdb-check \
+  --profile singularity --publish_dir_mode copy --outdir results_its
+```

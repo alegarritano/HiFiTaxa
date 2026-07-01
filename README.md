@@ -1,20 +1,24 @@
 # HiFiTaxa
 
-HiFiTaxa is a Nextflow pipeline for PacBio HiFi full length 16S rRNA data. It
-denoises reads with QIIME2 and DADA2, then assigns taxonomy against GTDB with up
-to three classifiers you can run in one invocation and compare directly: BLCA,
-Emu, and DADA2 Naive Bayes.
+HiFiTaxa is a Nextflow pipeline for PacBio HiFi full-length amplicon data. It
+handles two markers, selected with `--marker`:
 
-Pipeline: read QC, primer trimming (cutadapt), DADA2 denoising, ASV filtering,
-then taxonomy with any combination of BLCA, Emu, and the DADA2 two step Naive
-Bayes (genus `assignTaxonomy` plus exact match `addSpecies`). All three
-classifiers are anchored on the latest GTDB SSU release (r232).
+- **16S** (default): QC, primer trimming (cutadapt), DADA2 denoising, ASV
+  filtering, then taxonomy against GTDB (r232) with any combination of BLCA, Emu,
+  and the DADA2 two-step Naive Bayes (genus `assignTaxonomy` plus exact-match
+  `addSpecies`) — run in one invocation and compared on the same samples.
+- **ITS** (fungal): QC, then itsxrust pulls out the ITS region, and taxonomy is
+  assigned against UNITE. EMITS (a read-level EM profiler, the fungal analogue of
+  Emu) is the default; BLCA and single-step Naive Bayes run on the DADA2 ASVs if
+  you ask for them (DADA2 runs only then).
+
+See **[docs/MARKER_AWARE.md](docs/MARKER_AWARE.md)** for the full marker design.
 
 ## Requirements
 
 - Nextflow 24.04 to 24.x (the launcher pins 24.10.9; Nextflow 25/26 will not parse the config)
 - Singularity/Apptainer (on an HPC) or Docker (on a laptop), or conda/mamba
-- About 3 GB of free disk for the GTDB database, plus image cache, and internet for the first run
+- About 3 GB of free disk for the GTDB database (16S) or ~0.5 GB for UNITE (ITS), plus image cache, and internet for the first run
 
 ## Install
 
@@ -23,7 +27,7 @@ git clone https://github.com/alegarritano/HiFiTaxa.git
 cd HiFiTaxa
 mamba env create -f environment.yml
 conda activate HiFiTaxa
-source set_apptainer_cache.sh     # optional on HPC: the launcher sets repo-local image caches itself; source only to override
+source set_apptainer_cache.sh     # HPC: keep the image + conda caches inside the repo (off your $HOME quota)
 ```
 
 `environment.yml` installs a small driver environment: Nextflow, the launcher's
@@ -50,6 +54,8 @@ interactively for batch/HPC jobs (everything via flags). Reads may be
 
    ```
    python bin/run_pipeline.py --profile singularity
+   # fungal ITS instead of 16S:
+   python bin/run_pipeline.py --profile singularity --marker ITS
    # reads elsewhere:
    python bin/run_pipeline.py --profile singularity --reads_dir /scratch/me/fastqs
    ```
@@ -108,8 +114,13 @@ classifiers, all anchored on the same GTDB release:
   to Kingdom). Species from `addSpecies` are high precision but lower recall on
   full length reads, since the ASV must exactly match a reference 16S.
 
-Pick with `--classifier`: a single name, a comma list, or a shorthand. `all`
-expands to `blca,emu,nb`; `both` expands to `blca,emu` (kept for back compat):
+For **fungal ITS** (`--marker ITS`) the read-level classifier is **EMITS** (the
+fungal analogue of Emu), and it is the default. BLCA and single-step NB run on the
+itsxrust-extracted DADA2 ASVs if you add them; Emu and the 16S two-step NB do not
+apply to ITS.
+
+Pick with `--classifier`: a single name, a comma list, or a shorthand. For 16S,
+`all` expands to `blca,emu,nb`; `both` expands to `blca,emu` (kept for back compat):
 
 ```
 python bin/run_pipeline.py --input samples.tsv --metadata metadata.tsv \
@@ -128,10 +139,11 @@ reference (GTDB) and compares them on the same samples in a single invocation.
 
 ## Databases
 
-All three classifiers share one GTDB reference build (default r232). On the
-first run the launcher downloads and builds it automatically. To pin a release,
-rebuild it, or build any reference (BLCA, Emu, NB) by hand, see
-**[docs/databases.md](docs/databases.md)**.
+For 16S, all classifiers share one GTDB reference build (default r232), downloaded
+and built automatically on the first run. For **ITS**, download a UNITE release
+from <https://unite.ut.ee/repository.php> and the pipeline builds the BLCA / NB /
+EMITS references from it. To pin a release, rebuild, or build any reference by
+hand, see **[docs/databases.md](docs/databases.md)**.
 
 ## Offline / air-gapped HPC
 

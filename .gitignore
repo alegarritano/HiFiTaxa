@@ -13,6 +13,8 @@ execution_*.html
 singularity_cache/
 apptainer_cache/
 apptainer_tmp/
+conda_cache/
+conda_envs/
 
 # generated at runtime
 example_test_results/
