@@ -79,6 +79,36 @@ All of this needs internet, so do it here on the login node.
 Quick (~5–10 min total): the GTDB download + BLCA parse/index is ~2–3 min, the
 NB references ~1–2 min, and the Emu database ~2–3 min.
 
+### 5b. Download and build the UNITE database (ITS marker only)
+
+For fungal ITS runs (`--marker ITS`), download UNITE instead of GTDB. UNITE has no
+`latest` API, so pick the release you want from the repository page, resolve its
+DOI to the file URL through the PlutoF API, and pull it straight down:
+
+```
+# Browse https://unite.ut.ee/repository.php and take the DOI of the 'Current'
+# general FASTA release for Fungi (v10.0 / 2025-02-19 -> 10.15156/BIO/3301229 here).
+DOI=10.15156/BIO/3301229
+URL=$(curl -s "https://api.plutof.ut.ee/v1/public/dois/?format=vnd.api%2Bjson&identifier=$DOI" \
+      | python3 -c "import sys,json;print(json.load(sys.stdin)['data'][0]['attributes']['media'][-1]['url'])")
+wget -O unite.tgz "$URL"
+mkdir -p unite_src && tar xzf unite.tgz -C unite_src
+FASTA=$(find unite_src -name 'sh_general_release_dynamic_*.fasta' | head -1)
+
+bash bin/build_unite_blca_db.sh  "$FASTA" db_unite 0
+bash bin/build_unite_dada2_db.sh db_unite/unite_BLCAparsed.fasta db_unite/unite_BLCAparsed.taxonomy db_unite/unite_full_singlestep_ref.fa.gz
+bash bin/build_emits_db.sh       "$FASTA" db_unite
+```
+
+This builds all three UNITE references (BLCA + single-step NB + EMITS) into
+`db_unite/`, all with the driver env (`makeblastdb`, `python3`), no container
+needed. It needs internet, so do it here on the login node. (The itsxrust and
+EMITS steps also need their images cached in step 4: pull
+`ghcr.io/ayobi/itsxrust:latest` and, for EMITS, `ghcr.io/ayobi/emits:latest`.)
+
+Quick (~2–5 min): the ~29 MB download plus the BLCA parse/index and the two
+reformatted references.
+
 ## In an interactive job (offline)
 
 ### 6. Request the job
