@@ -156,12 +156,14 @@ workflow {
     if (params.skip_primer_trim) {
         reads_for_emu        = QC_fastq.out.filtered_fastq
         // marker==ITS still gets the itsxrust ITS extraction before import (only the
-        // cutadapt primer trim is skipped); 16S is unchanged.
+        // cutadapt primer trim is skipped); 16S is unchanged. EMITS also runs on the
+        // itsxrust-extracted reads.
         def reads_for_import_skip
         if (is_its) {
             itsx_extract(QC_fastq.out.filtered_fastq)
             reads_for_import_skip = itsx_extract.out.fastq
             filtered_fastq_files  = itsx_extract.out.fastq.map { sid, fq -> fq }
+            reads_for_emu         = itsx_extract.out.fastq   // EMITS on itsxrust-extracted reads (default)
         } else {
             reads_for_import_skip = QC_fastq.out.filtered_fastq
             filtered_fastq_files  = QC_fastq.out.filtered_fastq_files
@@ -177,19 +179,21 @@ workflow {
         // primer-removal stats, printed to the log right after cutadapt
         cutadapt_stats(cutadapt.out.summary_tocollect.collect())
         cutadapt_stats.out.stats.splitText().view { "[primer-removal] " + it.trim() }
-        // EMITS/Emu profile the (cutadapt-trimmed) reads directly — they do NOT use
-        // the itsxrust ITS extraction, which is a DADA2-only read prep.
+        // Emu (16S) profiles the cutadapt-trimmed reads directly. EMITS (ITS) profiles
+        // the itsxrust ITS-extracted reads (reads_for_emu is re-pointed to itsx_extract
+        // inside the is_its block below), so the read-level fungal profiler classifies the
+        // same ITS span as the ASV path — the configuration used for the reported results.
         reads_for_emu        = cutadapt.out.cutadapt_fastq
 
         // marker==ITS read prep: pull the full ITS span out of the trimmed reads with
-        // itsxrust BEFORE the QIIME2 import, so DADA2 denoises ITS-only sequences.
-        // 16S keeps the current cutadapt -> import path. Channel names downstream are
-        // identical; only the source (cutadapt vs itsx_extract) differs.
+        // itsxrust BEFORE the QIIME2 import, so DADA2 denoises ITS-only sequences, and
+        // feed the same itsxrust reads to EMITS. 16S keeps the cutadapt -> import path.
         def reads_for_import
         if (is_its) {
             itsx_extract(cutadapt.out.cutadapt_fastq)
             reads_for_import     = itsx_extract.out.fastq
             filtered_fastq_files = itsx_extract.out.fastq.map { sid, fq -> fq }
+            reads_for_emu        = itsx_extract.out.fastq   // EMITS classifies the itsxrust ITS-extracted reads (default)
         } else {
             reads_for_import     = cutadapt.out.cutadapt_fastq
             filtered_fastq_files = cutadapt.out.cutadapt_fastq_files
@@ -257,11 +261,10 @@ workflow {
         }
     }
 
-    // ---------------- Read-level EM branch (trimmed + length-filtered reads) ------
-    // Length-filter to the same min_len/max_len window DADA2 enforces, so the EM
-    // profiler and the ASV branch classify identically filtered reads.
-    //   16S -> Emu  (minimap2 + EM vs GTDB-Emu DB)
-    //   ITS -> EMITS (minimap2 map-hifi + emits run vs the staged UNITE FASTA)
+    // ---------------- Read-level EM branch (length-filtered reads) ----------------
+    // Length-filter to the same min_len/max_len window DADA2 enforces.
+    //   16S -> Emu   (cutadapt-trimmed reads;        minimap2 + EM vs the GTDB-Emu DB)
+    //   ITS -> EMITS (itsxrust ITS-extracted reads;  minimap2 map-hifi + emits run vs the UNITE FASTA)
     if (run_emu) {
         length_filter(reads_for_emu, params.min_len, params.max_len)
         if (is_its) {
