@@ -28,6 +28,11 @@ READS_DIR = "00_Reads"                 # drop your .fastq.gz reads here
 # Latest UNITE general release we know about. Bump this when UNITE ships a newer
 # sh_general_release; the launcher prints it so the user can decide to rebuild.
 LATEST_UNITE = "sh_general_release_dynamic_19.02.2025"
+# UNITE releases are downloaded by hand from the UNITE repository page: pick the
+# 'Current' general FASTA release for Fungi (e.g. version 10.0, 19.02.2025). The
+# ITS preflight points the user here, then asks for the downloaded FASTA and
+# builds the references from it (no auto-download / version API).
+UNITE_REPO_URL = "https://unite.ut.ee/repository.php"
 
 PROJDIR = Path(__file__).resolve().parent.parent
 MARKER = PROJDIR / ".first_run_complete"
@@ -836,6 +841,7 @@ def preflight_unite(args, unite_db_dir, blca_db, blca_tax,
     else:
         print(f"[unite] no UNITE reference found under {unite_db_dir}")
     print(f"[unite] latest known release     : {LATEST_UNITE}")
+    print(f"[unite] download releases from   : {UNITE_REPO_URL}")
     if have_all:
         print(f"[unite] all three UNITE references present "
               f"(BLCA + single-step NB + EMITS).")
@@ -858,13 +864,18 @@ def preflight_unite(args, unite_db_dir, blca_db, blca_tax,
                   f"/ build_emits_db.sh, then re-run.")
             return 2
         if not (args.assume_yes or sys.stdin.isatty()):
-            print(f"[unite] UNITE references missing/incomplete; pass --unite-fasta "
-                  f"<path> (or build manually) and re-run.")
+            print(f"[unite] UNITE references missing/incomplete; download a release from "
+                  f"{UNITE_REPO_URL},")
+            print(f"[unite] then pass --unite-fasta <path> (or build manually) and re-run.")
             return 2
 
     # Resolve the source UNITE FASTA: --unite-fasta wins; else prompt.
     unite_fasta = args.unite_fasta
     if not unite_fasta and sys.stdin.isatty():
+        print(f"[unite] Download a UNITE general FASTA release for Fungi from:")
+        print(f"[unite]   {UNITE_REPO_URL}")
+        print(f"[unite] Pick the 'Current' row (whichever release you want), extract the")
+        print(f"[unite] archive, then paste the path to the sh_general_release_dynamic_*.fasta below.")
         try:
             unite_fasta = input(
                 "[unite] Path to your UNITE general-release FASTA "
@@ -872,7 +883,9 @@ def preflight_unite(args, unite_db_dir, blca_db, blca_tax,
         except EOFError:
             unite_fasta = ""
     if not unite_fasta:
-        print(f"[unite] no UNITE FASTA supplied; cannot build. Pass --unite-fasta <path>.")
+        print(f"[unite] no UNITE FASTA supplied; cannot build. Download a release from "
+              f"{UNITE_REPO_URL}")
+        print(f"[unite] and pass --unite-fasta <path> (or paste the path when prompted).")
         return 2
     unite_fasta = os.path.abspath(os.path.expanduser(unite_fasta))
     if not os.path.isfile(unite_fasta):
@@ -1086,7 +1099,8 @@ def main():
                          "<projdir>/db_unite. Only used when --marker ITS.")
     ap.add_argument("--unite-fasta", default=None,
                     help="path to your UNITE general-release FASTA "
-                         "(sh_general_release_dynamic_*.fasta[.gz]); used to (re)build the ITS "
+                         "(sh_general_release_dynamic_*.fasta[.gz]), downloaded from "
+                         "https://unite.ut.ee/repository.php; used to (re)build the ITS "
                          "references via bin/build_unite_blca_db.sh / build_unite_dada2_db.sh / "
                          "build_emits_db.sh. Only used when --marker ITS.")
     # --- run control ---
