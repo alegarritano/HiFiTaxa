@@ -1,0 +1,15 @@
+# Conda env for the EMITS classifier branch (marker==ITS read-level EM profiling).
+# EMITS is the fungal-ITS analogue of Emu: minimap2 maps the trimmed HiFi reads to
+# the UNITE reference (params.emits_db), then `emits run` resolves abundances with
+# an EM loop. MIT licensed (https://github.com/ayobi/emits). Containerised profiles
+# use emits_container.
+#
+# EMITS is on bioconda (anaconda.org/bioconda/emits); minimap2 produces the map-hifi
+# PAF that `emits run` consumes, so it is pulled in alongside.
+name: hifitax_emits
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - emits>=0.1.0
+  - minimap2>=2.24

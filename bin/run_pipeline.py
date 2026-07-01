@@ -19,7 +19,15 @@ from pathlib import Path
 
 DEFAULT_FWD = "AGRGTTYGATYMTGGCTCAG"   # 27F
 DEFAULT_REV = "AAGTCGTAACAAGGTARCY"    # 1492R
+# ITS (fungal) marker defaults — must match the contract / nextflow.config and
+# HiFiTaxa_Fungi/bin/denoise_pipeline.sh (FWD / REVRC).
+DEFAULT_ITS_FWD = "GTACACACCGCCCGTC"   # 1391F
+DEFAULT_ITS_REV = "GCATATHANTAAGSGSAGG"  # revcomp(ITS4ngsUni)
 READS_DIR = "00_Reads"                 # drop your .fastq.gz reads here
+
+# Latest UNITE general release we know about. Bump this when UNITE ships a newer
+# sh_general_release; the launcher prints it so the user can decide to rebuild.
+LATEST_UNITE = "sh_general_release_dynamic_19.02.2025"
 
 PROJDIR = Path(__file__).resolve().parent.parent
 MARKER = PROJDIR / ".first_run_complete"
@@ -81,35 +89,59 @@ def welcome_wizard(args):
     keep_short = not _ask_yn("Apply the 1000 bp filter?", default="y")
     args.min_ref_len = 0 if keep_short else 1000
 
-    # ---- Q3: Emu -----------------------------------------------------------
-    print()
-    print("Q3. Add the Emu classifier?")
-    print("    EM-based species profiling on raw reads (Curry 2022 Nat. Methods).")
-    print("    Adds: ~3-5 min env install + ~5 min Emu DB build.")
-    use_emu = _ask_yn("Enable Emu?", default="n")
+    # The Emu / two-step NB prompts only apply to 16S. For the fungal ITS
+    # marker the read-level EM classifier is EMITS (not Emu) and the NB design is
+    # single-step, so we skip these prompts and default to blca + nb + emits.
+    is_its = (getattr(args, "marker", "16S") == "ITS")
 
-    # ---- Q4: DADA2 NB ------------------------------------------------------
-    print()
-    print("Q4. Add the DADA2 Naive-Bayes classifier (nb)?")
-    print("    DADA2 produces ASVs; DADA2's assignTaxonomy names them to genus")
-    print("    (Wang 2007 AEM, the RDP-style 16S Naive-Bayes), then exact-match")
-    print("    addSpecies recovers species. DADA2 + QIIME2 are already in the")
-    print("    amplicon image, so on -profile singularity/docker there's no extra")
-    print("    env install. No training: the two GTDB references build in ~1-2 min.")
-    print(f"    Adds: {ANSI_RED}~1-2 min reference build, ~11 GB RAM at run time{ANSI_RST}.")
-    use_nb = _ask_yn("Enable nb?", default="n")
+    if is_its:
+        # ---- ITS: fixed fungal classifier set --------------------------------
+        print()
+        print("Marker = ITS (fungal): classifiers default to BLCA + single-step")
+        print("    Naive-Bayes (nb) + EMITS read-level profiler. Emu and the 16S")
+        print("    two-step NB do not apply to ITS, so those prompts are skipped.")
+        use_emu = False           # Emu is 16S-only
+        use_nb = True             # ITS single-step NB
+        args.classifier = "blca,nb,emits"
+    else:
+        # ---- Q3: Emu -----------------------------------------------------------
+        print()
+        print("Q3. Add the Emu classifier?")
+        print("    EM-based species profiling on raw reads (Curry 2022 Nat. Methods).")
+        print("    Adds: ~3-5 min env install + ~5 min Emu DB build.")
+        use_emu = _ask_yn("Enable Emu?", default="n")
 
-    # ---- Build the classifier list ----------------------------------------
-    branches = ["blca"]
-    if use_emu: branches.append("emu")
-    if use_nb:  branches.append("nb")
-    args.classifier = ",".join(branches)
+        # ---- Q4: DADA2 NB ------------------------------------------------------
+        print()
+        print("Q4. Add the DADA2 Naive-Bayes classifier (nb)?")
+        print("    DADA2 produces ASVs; DADA2's assignTaxonomy names them to genus")
+        print("    (Wang 2007 AEM, the RDP-style 16S Naive-Bayes), then exact-match")
+        print("    addSpecies recovers species. DADA2 + QIIME2 are already in the")
+        print("    amplicon image, so on -profile singularity/docker there's no extra")
+        print("    env install. No training: the two GTDB references build in ~1-2 min.")
+        print(f"    Adds: {ANSI_RED}~1-2 min reference build, ~11 GB RAM at run time{ANSI_RST}.")
+        use_nb = _ask_yn("Enable nb?", default="n")
+
+        # ---- Build the classifier list ----------------------------------------
+        branches = ["blca"]
+        if use_emu: branches.append("emu")
+        if use_nb:  branches.append("nb")
+        args.classifier = ",".join(branches)
 
     # ---- Q5: validation run -----------------------------------------------
-    print()
-    print("Q5. Run the bundled 8-sample ATCC mock community to validate the install?")
-    print("    Recommended — confirms every classifier you chose works end-to-end.")
-    run_example = _ask_yn("Run validation at the end?", default="y")
+    # The bundled reference-compared validation (example_test) is the 16S ATCC
+    # mock; there's no ITS equivalent wired into example_test, so only offer it
+    # for 16S. ITS users validate via `-profile test_its` (see nextflow.config).
+    if is_its:
+        run_example = False
+        print()
+        print("    (Skipping the bundled 16S mock validation — marker is ITS.")
+        print("     Validate the ITS path with:  nextflow run . -profile test_its)")
+    else:
+        print()
+        print("Q5. Run the bundled 8-sample ATCC mock community to validate the install?")
+        print("    Recommended — confirms every classifier you chose works end-to-end.")
+        run_example = _ask_yn("Run validation at the end?", default="y")
 
     # ---- Make subsequent preflights unattended ----------------------------
     # The user has now confirmed every install upfront, so the GTDB/Emu/NB
@@ -732,6 +764,158 @@ def preflight_nb(args, blca_db, blca_tax, genus_db, species_db, passthrough=None
     return subprocess.run(cmd, env=os.environ.copy()).returncode
 
 
+def _detect_unite_version(unite_db_dir):
+    """Best-effort: report the installed UNITE reference version.
+
+    Resolution order (matches what bin/build_unite_*.sh write):
+      1. <unite_db_dir>/UNITE_VERSION.txt   (written by build_unite_blca_db.sh)
+      2. the date in a staged FASTA filename / header, e.g.
+         'sh_general_release_dynamic_19.02.2025'
+    Returns the version string, or None if nothing UNITE-shaped is installed.
+    """
+    vtxt = os.path.join(unite_db_dir, "UNITE_VERSION.txt")
+    if os.path.isfile(vtxt):
+        try:
+            tag = open(vtxt).read().strip()
+            if tag:
+                return tag.splitlines()[0].strip()
+        except OSError:
+            pass
+    # Fall back to parsing a release tag (or a DD.MM.YYYY date) out of a staged
+    # FASTA's name or its first header line.
+    pat = re.compile(r"sh_general_release[\w.]*?\d{2}\.\d{2}\.\d{4}")
+    datepat = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
+    for name in ("unite.fasta", "unite_BLCAparsed.fasta"):
+        fa = os.path.join(unite_db_dir, name)
+        if not os.path.isfile(fa):
+            continue
+        m = pat.search(os.path.basename(fa))
+        if m:
+            return m.group(0)
+        try:
+            with open(fa) as fh:
+                head = fh.readline()
+        except OSError:
+            head = ""
+        m = pat.search(head) or datepat.search(head)
+        if m:
+            return m.group(0)
+    return None
+
+
+def preflight_unite(args, unite_db_dir, blca_db, blca_tax,
+                    emits_db, singlestep_db):
+    """ITS-only: report the installed UNITE reference version, tell the user the
+    latest release we know about, and offer to (re)build the three UNITE-derived
+    references (BLCA, single-step DADA2 NB, EMITS) from a user-supplied UNITE
+    FASTA. The user already has the FASTA — we just call the build scripts.
+
+    Build scripts (bin/):
+      build_unite_blca_db.sh   <unite_fasta> <db-dir> [min-len]  -> unite_BLCAparsed.{fasta,taxonomy}
+      build_unite_dada2_db.sh  <blca_fasta> <blca_tax> <out_fa_gz> -> unite_full_singlestep_ref.fa.gz
+      build_emits_db.sh        <unite_fasta> <db-dir>            -> unite.fasta (minimap2 target)
+
+    Returns 0 on success / when the user keeps the existing DB, non-zero on a
+    build failure. Skipped entirely with --skip-gtdb-check (the umbrella
+    'use existing DBs as-is' flag).
+    """
+    if args.skip_gtdb_check:
+        return 0
+
+    installed = _detect_unite_version(unite_db_dir)
+    have_blca = (os.path.isfile(blca_db) and os.path.isfile(blca_tax))
+    have_all = have_blca and os.path.isfile(emits_db) and os.path.isfile(singlestep_db)
+
+    print()
+    print("────────── UNITE reference (ITS marker) ──────────")
+    if installed:
+        print(f"[unite] installed UNITE version : {installed}")
+    else:
+        print(f"[unite] no UNITE reference found under {unite_db_dir}")
+    print(f"[unite] latest known release     : {LATEST_UNITE}")
+    if have_all:
+        print(f"[unite] all three UNITE references present "
+              f"(BLCA + single-step NB + EMITS).")
+
+    # Decide whether to (re)build.
+    if have_all:
+        # Present: only rebuild on explicit opt-in.
+        if args.assume_yes or args.assume_no:
+            return 0
+        if not sys.stdin.isatty():
+            return 0
+        if not _ask_yn("(Re)build the UNITE references from a UNITE FASTA?", default="n"):
+            print("[unite] keeping the installed UNITE references as-is.")
+            return 0
+    else:
+        # Missing/incomplete: must build (unless told never to).
+        if args.assume_no:
+            print(f"[unite] UNITE references missing/incomplete and --assume-no given; "
+                  f"build them with bin/build_unite_blca_db.sh / build_unite_dada2_db.sh "
+                  f"/ build_emits_db.sh, then re-run.")
+            return 2
+        if not (args.assume_yes or sys.stdin.isatty()):
+            print(f"[unite] UNITE references missing/incomplete; pass --unite-fasta "
+                  f"<path> (or build manually) and re-run.")
+            return 2
+
+    # Resolve the source UNITE FASTA: --unite-fasta wins; else prompt.
+    unite_fasta = args.unite_fasta
+    if not unite_fasta and sys.stdin.isatty():
+        try:
+            unite_fasta = input(
+                "[unite] Path to your UNITE general-release FASTA "
+                "(sh_general_release_dynamic_*.fasta[.gz]): ").strip()
+        except EOFError:
+            unite_fasta = ""
+    if not unite_fasta:
+        print(f"[unite] no UNITE FASTA supplied; cannot build. Pass --unite-fasta <path>.")
+        return 2
+    unite_fasta = os.path.abspath(os.path.expanduser(unite_fasta))
+    if not os.path.isfile(unite_fasta):
+        print(f"[unite] UNITE FASTA not found: {unite_fasta}")
+        return 2
+
+    os.makedirs(unite_db_dir, exist_ok=True)
+    env = os.environ.copy()
+    # Tag the build with the release parsed from the filename if it looks like a
+    # UNITE release, so UNITE_VERSION.txt records the actual release rather than
+    # the build script's hardcoded default.
+    m = re.search(r"sh_general_release[\w.]*?\d{2}\.\d{2}\.\d{4}",
+                  os.path.basename(unite_fasta))
+    if m:
+        env["UNITE_VERSION"] = m.group(0)
+
+    print(f"[unite] building UNITE references from {unite_fasta}")
+    # 1) BLCA reference (+ BLAST index) and the taxonomy that the DADA2 single-step
+    #    build consumes.
+    rc = subprocess.run(
+        ["bash", str(PROJDIR / "bin" / "build_unite_blca_db.sh"),
+         unite_fasta, unite_db_dir, str(args.min_ref_len or 0)],
+        env=env).returncode
+    if rc:
+        print(f"[unite] ✗ build_unite_blca_db.sh failed (exit {rc})")
+        return rc
+    # 2) single-step 7-rank DADA2 NB reference, from the BLCA outputs.
+    rc = subprocess.run(
+        ["bash", str(PROJDIR / "bin" / "build_unite_dada2_db.sh"),
+         blca_db, blca_tax, singlestep_db],
+        env=env).returncode
+    if rc:
+        print(f"[unite] ✗ build_unite_dada2_db.sh failed (exit {rc})")
+        return rc
+    # 3) EMITS minimap2 target (raw UNITE FASTA staged verbatim).
+    rc = subprocess.run(
+        ["bash", str(PROJDIR / "bin" / "build_emits_db.sh"),
+         unite_fasta, unite_db_dir],
+        env=env).returncode
+    if rc:
+        print(f"[unite] ✗ build_emits_db.sh failed (exit {rc})")
+        return rc
+    print(f"[unite] ✓ UNITE references built under {unite_db_dir}")
+    return 0
+
+
 def _setup_container_caches(args):
     """Point Apptainer/Singularity + Nextflow image caches at repo-local dirs
     (off $HOME) and make sure they exist. Idempotent: respects anything already
@@ -865,9 +1049,17 @@ def main():
                          "you'll be prompted for the path.")
     ap.add_argument("--outdir", default="results")
     ap.add_argument("--profile", default="standard", help="standard | conda | docker | singularity")
+    # --- marker (drives primers, length window, reference DBs, classifiers) ---
+    ap.add_argument("--marker", default="16S", choices=["16S", "ITS"],
+                    help="amplicon marker: '16S' (GTDB/Emu, default) or 'ITS' (fungal; UNITE/EMITS, "
+                         "itsxrust extraction + single-step NB). Forwarded to Nextflow as --marker.")
     # --- primers / trimming (forwarded to Nextflow; defaults come from nextflow.config) ---
-    ap.add_argument("--forward_primer", default=None, help=f"forward primer (default {DEFAULT_FWD} = 27F)")
-    ap.add_argument("--reverse_primer", default=None, help=f"reverse primer (default {DEFAULT_REV} = 1492R)")
+    ap.add_argument("--forward_primer", default=None,
+                    help=f"forward primer (16S default {DEFAULT_FWD} = 27F; "
+                         f"ITS default {DEFAULT_ITS_FWD} = 1391F)")
+    ap.add_argument("--reverse_primer", default=None,
+                    help=f"reverse primer (16S default {DEFAULT_REV} = 1492R; "
+                         f"ITS default {DEFAULT_ITS_REV} = revcomp(ITS4ngsUni))")
     ap.add_argument("--skip_primer_trim", action="store_true", help="skip cutadapt primer trimming")
     # --- GTDB database ---
     ap.add_argument("--gtdb_db_dir", default=str(PROJDIR / "db"))
@@ -884,6 +1076,16 @@ def main():
                     help="GTDB release to target. Default 'latest' = query GTDB at run time "
                          "for the newest release. Pass an explicit release (e.g. 232) to pin.")
     ap.add_argument("--gtdb-timeout", type=float, default=15.0)
+    # --- UNITE database (ITS marker only) ---
+    ap.add_argument("--unite_db_dir", default=None,
+                    help="directory holding the UNITE-derived ITS references (unite_BLCAparsed.{fasta,"
+                         "taxonomy}, unite_full_singlestep_ref.fa.gz, unite.fasta). Default: "
+                         "<projdir>/db_unite. Only used when --marker ITS.")
+    ap.add_argument("--unite-fasta", default=None,
+                    help="path to your UNITE general-release FASTA "
+                         "(sh_general_release_dynamic_*.fasta[.gz]); used to (re)build the ITS "
+                         "references via bin/build_unite_blca_db.sh / build_unite_dada2_db.sh / "
+                         "build_emits_db.sh. Only used when --marker ITS.")
     # --- run control ---
     ap.add_argument("--test", action="store_true", help="run the bundled example + compare to reference, then exit")
     ap.add_argument("--skip-test", action="store_true", help="never offer/run the first-run example test")
@@ -918,8 +1120,49 @@ def main():
                     help="use the existing NB classifier as-is; never train")
     args, passthrough = ap.parse_known_args()
 
-    blca_db = args.blca_db or os.path.join(args.gtdb_db_dir, "gtdb_ssu_BLCAparsed.fasta")
-    blca_tax = args.blca_tax or os.path.join(args.gtdb_db_dir, "gtdb_ssu_BLCAparsed.taxonomy")
+    # Did the user set these explicitly on the CLI? (Used so the interactive
+    # marker prompt and the ITS classifier default don't clobber explicit flags.)
+    marker_explicit = any(a == "--marker" or a.startswith("--marker=") for a in sys.argv[1:])
+    classifier_explicit = any(
+        a == "--classifier" or a.startswith("--classifier=") for a in sys.argv[1:])
+
+    # ── Marker selection (interactive) ─────────────────────────────────────
+    # Ask 16S vs ITS BEFORE resolving reference DBs / primers / classifiers,
+    # since every one of those switches on the marker. Only prompt when we're
+    # interactive and the user didn't pin --marker on the CLI; otherwise honour
+    # whatever --marker holds (default '16S'). Skipped for taxonomy-only FASTA
+    # runs handled the same as a normal marker default.
+    _interactive_early = sys.stdin.isatty() and not (args.assume_yes or args.assume_no)
+    if _interactive_early and not marker_explicit:
+        print()
+        print("Which amplicon marker are you classifying?")
+        print("  16S = bacterial/archaeal full-length 16S rRNA (GTDB, Emu)")
+        print("  ITS = fungal ITS (UNITE, EMITS; itsxrust extraction + single-step NB)")
+        try:
+            ans = input("    Marker [16S/ITS] (default 16S): ").strip().lower()
+        except EOFError:
+            ans = ""
+        args.marker = "ITS" if ans in ("its", "fungal", "fungi") else "16S"
+        print(f"[launcher] marker = {args.marker}")
+
+    is_its = (args.marker == "ITS")
+    # For ITS, default the classifier set to BLCA + single-step NB + EMITS and
+    # skip the Emu / two-step NB prompts (Emu is 16S-only; ITS NB is single-step).
+    # An explicit --classifier always wins.
+    if is_its and not classifier_explicit:
+        args.classifier = "blca,nb,emits"
+
+    # marker-aware reference resolution. For ITS, blca_db/blca_tax point at the
+    # UNITE references (matching the nextflow.config marker switch); 16S keeps GTDB.
+    unite_db_dir = args.unite_db_dir or str(PROJDIR / "db_unite")
+    if is_its:
+        blca_db = args.blca_db or os.path.join(unite_db_dir, "unite_BLCAparsed.fasta")
+        blca_tax = args.blca_tax or os.path.join(unite_db_dir, "unite_BLCAparsed.taxonomy")
+    else:
+        blca_db = args.blca_db or os.path.join(args.gtdb_db_dir, "gtdb_ssu_BLCAparsed.fasta")
+        blca_tax = args.blca_tax or os.path.join(args.gtdb_db_dir, "gtdb_ssu_BLCAparsed.taxonomy")
+    emits_db = os.path.join(unite_db_dir, "unite.fasta")
+    unite_singlestep_db = os.path.join(unite_db_dir, "unite_full_singlestep_ref.fa.gz")
     emu_db_dir = args.emu_db_dir or str(PROJDIR / "db_emu")
     nb_dir = args.nb_db_dir or str(PROJDIR / "db_nb")
     nb_genus   = os.path.join(nb_dir, "gtdb_ssu_dada2_genus.fa.gz")
@@ -962,7 +1205,8 @@ def main():
     # resolve inputs: explicit --input/--asv_fasta, else interactive sample-sheet build
     if not (args.asv_fasta or input_tsv):
         if interactive:
-            input_tsv, metadata_tsv, fwd, rev = interactive_setup(reads_dir=args.reads_dir)
+            input_tsv, metadata_tsv, fwd, rev = interactive_setup(
+                reads_dir=args.reads_dir, marker=args.marker)
         else:
             print("[launcher] no --input or --asv_fasta given.")
             print("[launcher] for a batch job pass, e.g.:")
@@ -972,24 +1216,41 @@ def main():
 
     # forward primer / trim choices to Nextflow (unset -> nextflow.config defaults)
     extra = list(passthrough)
+    extra += ["--marker", args.marker]
     if fwd: extra += ["--forward_primer", fwd]
     if rev: extra += ["--reverse_primer", rev]
     if args.skip_primer_trim: extra += ["--skip_primer_trim", "true"]
-    # classifier choice + Emu/NB DB paths; forward the env paths the launcher
-    # consumed (--qiime2_env, --emu_env) so -profile standard sees them too.
-    extra += ["--classifier", args.classifier,
-              "--emu_db_dir", emu_db_dir,
-              "--gtdb_dada2_genus_db", nb_genus,
-              "--gtdb_dada2_species_db", nb_species]
+    # classifier choice; forward the env paths the launcher consumed
+    # (--qiime2_env, --emu_env) so -profile standard sees them too.
+    extra += ["--classifier", args.classifier]
+    if is_its:
+        # ITS reference paths (UNITE): EMITS minimap2 target + single-step NB ref.
+        extra += ["--unite_db_dir", unite_db_dir,
+                  "--emits_db", emits_db,
+                  "--unite_dada2_singlestep_db", unite_singlestep_db]
+    else:
+        # 16S reference paths (GTDB): Emu DB + two-step DADA2 NB references.
+        extra += ["--emu_db_dir", emu_db_dir,
+                  "--gtdb_dada2_genus_db", nb_genus,
+                  "--gtdb_dada2_species_db", nb_species]
     if args.qiime2_env: extra += ["--qiime2_env", args.qiime2_env]
     if args.emu_env:    extra += ["--emu_env",    args.emu_env]
 
-    rc = preflight(args, blca_db, blca_tax)
-    if rc: return rc
-    rc = preflight_emu(args, blca_db, blca_tax, emu_db_dir)
-    if rc: return rc
-    rc = preflight_nb(args, blca_db, blca_tax, nb_genus, nb_species, passthrough=passthrough)
-    if rc: return rc
+    if is_its:
+        # ITS: report the installed UNITE version, offer a (re)build from a
+        # user-supplied UNITE FASTA, then ensure the three UNITE references
+        # exist. Emu / two-step GTDB NB preflights do not apply.
+        rc = preflight_unite(args, unite_db_dir, blca_db, blca_tax,
+                             emits_db, unite_singlestep_db)
+        if rc: return rc
+    else:
+        # 16S: GTDB version check + optional Emu / two-step NB reference builds.
+        rc = preflight(args, blca_db, blca_tax)
+        if rc: return rc
+        rc = preflight_emu(args, blca_db, blca_tax, emu_db_dir)
+        if rc: return rc
+        rc = preflight_nb(args, blca_db, blca_tax, nb_genus, nb_species, passthrough=passthrough)
+        if rc: return rc
 
     # ── Phase 3: validation run (only on first install, only if user opted in) ──
     # The wizard collected this decision upfront so we can run unattended.
@@ -1085,10 +1346,13 @@ def _metadata_blanks(path):
     return blanks
 
 
-def interactive_setup(reads_dir=None):
+def interactive_setup(reads_dir=None, marker="16S"):
     """Generate samples.tsv + metadata.tsv from the reads folder, have the
     user fill the metadata 'condition' column (left blank on purpose), confirm
     it's filled, then confirm primers. Returns (samples, metadata, fwd, rev).
+
+    `marker` ('16S' or 'ITS') selects which primer defaults are offered: 16S
+    27F/1492R, or the fungal ITS 1391F / revcomp(ITS4ngsUni) pair.
 
     If `reads_dir` is given (i.e. user passed --reads-dir), use that.
     Otherwise look for ./00_Reads and <projdir>/00_Reads; if neither exists,
@@ -1173,9 +1437,17 @@ def interactive_setup(reads_dir=None):
         print(f"[setup] Fill them in, save, then answer y.")
     print("[setup] metadata.tsv looks complete.")
 
-    if _ask(f"[setup] Are your primers the full-length 16S 27F ({DEFAULT_FWD}) / "
-            f"1492R ({DEFAULT_REV})? [y/N] "):
-        fwd, rev = DEFAULT_FWD, DEFAULT_REV
+    # Offer the marker-appropriate primer defaults.
+    if marker == "ITS":
+        def_fwd, def_rev = DEFAULT_ITS_FWD, DEFAULT_ITS_REV
+        prompt = (f"[setup] Are your primers the fungal ITS 1391F ({def_fwd}) / "
+                  f"ITS4ngsUni-revcomp ({def_rev})? [y/N] ")
+    else:
+        def_fwd, def_rev = DEFAULT_FWD, DEFAULT_REV
+        prompt = (f"[setup] Are your primers the full-length 16S 27F ({def_fwd}) / "
+                  f"1492R ({def_rev})? [y/N] ")
+    if _ask(prompt):
+        fwd, rev = def_fwd, def_rev
     else:
         fwd = input("[setup] Forward primer sequence (5'->3'): ").strip()
         rev = input("[setup] Reverse primer sequence (5'->3'): ").strip()
