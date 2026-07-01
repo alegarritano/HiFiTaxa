@@ -10,6 +10,7 @@ name: hifitax_itsx
 channels:
   - conda-forge
   - bioconda
+  - nodefaults   # exclude 'defaults': it pulls gsl from pkgs/main with a soname bioconda's nhmmer can't load (libgsl.so.25 missing at runtime)
 dependencies:
   - itsxrust>=0.2.2
   - hmmer>=3.3

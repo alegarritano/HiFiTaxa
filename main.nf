@@ -92,13 +92,48 @@ if (params.skip_primer_trim) {
     dynamic_forward_primer = params.forward_primer; dynamic_reverse_primer = params.reverse_primer; trim_cutadapt = "Yes"
 }
 
-// ---- marker-derived display names (MARKER / is_its resolved above) --------
+// ---- marker-derived display names + which branches actually run ----------
 def reference_name = is_its ? 'UNITE (db_unite)' : 'GTDB (db)'
-def read_em_name   = is_its ? 'EMITS' : 'Emu'
-def nb_design_name = is_its ? 'single-step (7-rank assignTaxonomy, no addSpecies)'
-                            : 'two-step (genus assignTaxonomy + exact-match addSpecies)'
-def read_prep_name = is_its ? 'itsxrust ITS extraction -> DADA2 (no cutadapt; itsxrust trims the primer-bearing flanks)'
-                            : 'cutadapt -> DADA2 for ASVs; Emu on QC reads (no cutadapt)'
+def runs_dada2     = (run_blca || run_nb)   // the DADA2/ASV path runs ONLY for BLCA or NB
+def trim_display   = is_its ? 'No (itsxrust trims the SSU/LSU flanks)' : trim_cutadapt
+def read_prep_name = is_its
+    ? ('itsxrust ITS extraction (no cutadapt)' + (runs_dada2 ? ' -> DADA2 for ASVs' : '; read-level EMITS only, no DADA2'))
+    : ('cutadapt primer trim' + (runs_dada2 ? ' -> DADA2 for ASVs' : '') + (run_emu ? '; Emu on QC reads' : ''))
+
+// Only print the sections for branches that will actually run, marker-aware.
+def dada2_block = runs_dada2 ? """
+  --- DADA2 (ASVs for BLCA / NB) ---
+  DADA2 min/max len:         $params.min_len / $params.max_len
+  DADA2 maxEE / minQ:        $params.max_ee / $params.minQ
+  DADA2 pooling:             $params.pooling_method
+  Min ASV total freq:        $dynamic_min_asv_totalfreq
+  Min ASV samples:           $dynamic_min_asv_sample""" : ''
+
+def blca_block = run_blca ? """
+  --- BLCA branch ---
+  BLCA db:                   $params.blca_db
+  BLCA taxonomy:             $params.blca_tax
+  BLCA chunk size (ASVs):    $params.blca_chunk_size""" : ''
+
+def readem_block = run_emu ? (is_its ? """
+  --- EMITS branch (read-level, on itsxrust reads) ---
+  EMITS UNITE target:        $params.emits_db
+  EMITS minimap2 preset:     map-hifi
+  EMITS threads/sample:      $params.emits_threads
+  EMITS read length filter:  $params.min_len-$params.max_len bp""" : """
+  --- Emu branch (read-level, on QC reads) ---
+  Emu DB dir:                $params.emu_db_dir
+  Emu minimap2 preset:       $params.emu_type
+  Emu threads/sample:        $params.emu_threads
+  Emu read length filter:    $params.min_len-$params.max_len bp
+  Emu min-abundance:         ${params.emu_min_abundance != null ? params.emu_min_abundance : 'default'}""") : ''
+
+def nb_block = run_nb ? (is_its ? """
+  --- NB branch (single-step 7-rank assignTaxonomy) ---
+  UNITE 7-rank ref:          $params.unite_dada2_singlestep_db""" : """
+  --- NB branch (two-step genus assignTaxonomy + addSpecies, bootstrap=$params.nb_min_bootstrap) ---
+    GTDB genus ref   : $params.gtdb_dada2_genus_db
+    GTDB species ref : $params.gtdb_dada2_species_db""") : ''
 
 log_text = """
   HiFiTaxa pipeline
@@ -108,32 +143,10 @@ log_text = """
   Reference:                 $reference_name
   Read prep:                 $read_prep_name
   Filter reads above Q:      $params.filterQ
-  Trim primers (cutadapt):   $trim_cutadapt
+  Trim primers (cutadapt):   $trim_display
   Forward primer:            $params.forward_primer
   Reverse primer:            $params.reverse_primer
-  Classifier(s):             ${selected_display.join(',')}
-  NB design:                 $nb_design_name
-  Read-level EM classifier:  $read_em_name
-  --- DADA2 (needed for BLCA + NB) ---
-  DADA2 min/max len:         $params.min_len / $params.max_len
-  DADA2 maxEE / minQ:        $params.max_ee / $params.minQ
-  DADA2 pooling:             $params.pooling_method
-  Min ASV total freq:        $dynamic_min_asv_totalfreq
-  Min ASV samples:           $dynamic_min_asv_sample
-  --- BLCA branch ---
-  GTDB BLCA db:              $params.blca_db
-  GTDB BLCA taxonomy:        $params.blca_tax
-  BLCA chunk size (ASVs):    $params.blca_chunk_size
-  --- Emu branch ---
-  Emu DB dir:                $params.emu_db_dir
-  Emu minimap2 preset:       $params.emu_type
-  Emu threads/sample:        $params.emu_threads
-  Emu read length filter:    $params.min_len-$params.max_len bp (matches DADA2)
-  Emu min-abundance:         ${params.emu_min_abundance != null ? params.emu_min_abundance : 'default'}
-  --- NB branch ---
-  NB DADA2 two-step (genus assignTaxonomy + exact-match addSpecies, bootstrap=$params.nb_min_bootstrap):
-    GTDB genus ref   : $params.gtdb_dada2_genus_db
-    GTDB species ref : $params.gtdb_dada2_species_db
+  Classifier(s):             ${selected_display.join(',')}${dada2_block}${blca_block}${readem_block}${nb_block}
 """
 
 workflow {

@@ -10,6 +10,7 @@ name: hifitax_emits
 channels:
   - conda-forge
   - bioconda
+  - nodefaults   # exclude 'defaults' so bioconda deps use their conda-forge build deps (avoids ABI/soname mismatches)
 dependencies:
   - emits>=0.1.0
   - minimap2>=2.24
