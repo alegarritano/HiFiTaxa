@@ -90,8 +90,8 @@ def reference_name = is_its ? 'UNITE (db_unite)' : 'GTDB (db)'
 def read_em_name   = is_its ? 'EMITS' : 'Emu'
 def nb_design_name = is_its ? 'single-step (7-rank assignTaxonomy, no addSpecies)'
                             : 'two-step (genus assignTaxonomy + exact-match addSpecies)'
-def read_prep_name = is_its ? 'cutadapt -> itsxrust ITS extraction -> DADA2'
-                            : 'cutadapt -> DADA2'
+def read_prep_name = is_its ? 'itsxrust ITS extraction -> DADA2 (no cutadapt; itsxrust trims the primer-bearing flanks)'
+                            : 'cutadapt -> DADA2 for ASVs; Emu on QC reads (no cutadapt)'
 
 log_text = """
   HiFiTaxa pipeline
@@ -174,29 +174,28 @@ workflow {
             import_qiime2(qiime2_manifest, filtered_fastq_files.collect())
         }
     } else {
-        cutadapt(QC_fastq.out.filtered_fastq, dynamic_forward_primer, dynamic_reverse_primer)
-        QC_fastq_post_trim(cutadapt.out.cutadapt_fastq)
-        // primer-removal stats, printed to the log right after cutadapt
-        cutadapt_stats(cutadapt.out.summary_tocollect.collect())
-        cutadapt_stats.out.stats.splitText().view { "[primer-removal] " + it.trim() }
-        // Emu (16S) profiles the cutadapt-trimmed reads directly. EMITS (ITS) profiles
-        // the itsxrust ITS-extracted reads (reads_for_emu is re-pointed to itsx_extract
-        // inside the is_its block below), so the read-level fungal profiler classifies the
-        // same ITS span as the ASV path — the configuration used for the reported results.
-        reads_for_emu        = cutadapt.out.cutadapt_fastq
-
-        // marker==ITS read prep: pull the full ITS span out of the trimmed reads with
-        // itsxrust BEFORE the QIIME2 import, so DADA2 denoises ITS-only sequences, and
-        // feed the same itsxrust reads to EMITS. 16S keeps the cutadapt -> import path.
+        // Primer handling is marker-specific.
+        //  - ITS runs NO cutadapt: itsxrust extracts the ITS1-5.8S-ITS2 span from the QC
+        //    reads and trims the conserved SSU/LSU flanks that carry the primers (1391F in
+        //    the SSU, ITS4ngsUni in the LSU), so both DADA2 (ASVs) and EMITS work on
+        //    primer-free ITS reads without a cutadapt step.
+        //  - 16S keeps cutadapt, but only on the DADA2/ASV path (there is no ITS
+        //    extraction to remove primers before denoising); Emu runs on the QC reads
+        //    directly, since minimap2 soft-clips the primer ends.
         def reads_for_import
         if (is_its) {
-            itsx_extract(cutadapt.out.cutadapt_fastq)
+            itsx_extract(QC_fastq.out.filtered_fastq)
             reads_for_import     = itsx_extract.out.fastq
             filtered_fastq_files = itsx_extract.out.fastq.map { sid, fq -> fq }
-            reads_for_emu        = itsx_extract.out.fastq   // EMITS classifies the itsxrust ITS-extracted reads (default)
+            reads_for_emu        = itsx_extract.out.fastq            // EMITS on the itsxrust ITS-extracted reads
         } else {
+            cutadapt(QC_fastq.out.filtered_fastq, dynamic_forward_primer, dynamic_reverse_primer)
+            QC_fastq_post_trim(cutadapt.out.cutadapt_fastq)
+            cutadapt_stats(cutadapt.out.summary_tocollect.collect())
+            cutadapt_stats.out.stats.splitText().view { "[primer-removal] " + it.trim() }
             reads_for_import     = cutadapt.out.cutadapt_fastq
             filtered_fastq_files = cutadapt.out.cutadapt_fastq_files
+            reads_for_emu        = QC_fastq.out.filtered_fastq       // Emu on the QC reads (no cutadapt)
         }
         if (run_blca) {
             prepare_qiime2_manifest(reads_for_import.collect(), metadata_file)
