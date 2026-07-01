@@ -114,18 +114,6 @@ EMITS steps run from the conda envs you built in step 4, not from images.)
 Quick (~2–5 min): the ~29 MB download plus the BLCA parse/index and the two
 reformatted references.
 
-### 5c. (ITS) validate on the login node — optional
-
-The itsxrust + EMITS conda envs were built in step 4, and the pipeline auto-detects
-`conda_envs/<tool>`, so nothing extra is needed at run time — nhmmer ships inside
-the env. To confirm the whole ITS path before submitting, run the bundled mock
-once here:
-
-```
-source set_apptainer_cache.sh
-nextflow run . -profile test_its,singularity
-```
-
 ## In an interactive job (offline)
 
 ### 6. Request the job
@@ -135,7 +123,7 @@ qsub -I -P <proj> -q normal \
   -l walltime=06:00:00,ncpus=16,mem=64GB,jobfs=100GB,storage=scratch/<proj>+gdata/<proj>
 ```
 
-### 7. Re-prepare the shell and run
+### 7. Re-prepare the shell
 
 Each fresh job starts clean, so reload everything (no internet needed now):
 
@@ -147,7 +135,44 @@ conda activate HiFiTaxa
 source set_apptainer_cache.sh
 export NXF_HOME="$PWD/.nextflow"      # the Nextflow runtime you cached on the login node
 export NXF_OFFLINE=true               # don't reach the network for Nextflow plugins/updates
+```
 
+### 8. Validate with the bundled tests (optional)
+
+The databases, images and conda envs are already staged, so these build and download
+nothing; they just confirm each classifier runs end to end offline. `-resume` on the
+2nd/3rd run of a marker reuses the shared QC/denoising, so only the new branch runs.
+
+16S mock (GTDB), one run per classifier:
+
+```bash
+nextflow run . -profile test,singularity --classifier blca            # BLCA / GTDB
+nextflow run . -profile test,singularity --classifier emu  -resume    # Emu / GTDB-Emu
+nextflow run . -profile test,singularity --classifier nb   -resume    # DADA2 Naive Bayes / GTDB
+```
+
+Fungal ITS mock (UNITE), one run per classifier:
+
+```bash
+nextflow run . -profile test_its,singularity --classifier emits          # EMITS / UNITE (default)
+nextflow run . -profile test_its,singularity --classifier blca  -resume  # BLCA / UNITE
+nextflow run . -profile test_its,singularity --classifier nb    -resume  # single-step NB / UNITE
+```
+
+Or run all of a marker's classifiers in one command: `--classifier all` is
+marker-aware (16S: blca,emu,nb; ITS: blca,emits,nb):
+
+```bash
+nextflow run . -profile test,singularity     --classifier all   # 16S: BLCA + Emu + NB
+nextflow run . -profile test_its,singularity --classifier all   # ITS: BLCA + EMITS + NB
+```
+
+Requirements: 16S `emu` needs `db_emu/` and `nb` needs `db_nb/` (both from step 5);
+ITS needs `db_unite/` from step 5b and the two conda envs from step 4.
+
+### 9. Run your own data
+
+```bash
 python bin/run_pipeline.py \
   --input samples.tsv --metadata metadata.tsv \
   --classifier all \

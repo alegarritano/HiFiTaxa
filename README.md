@@ -154,6 +154,21 @@ from <https://unite.ut.ee/repository.php> and the pipeline builds the BLCA / NB 
 EMITS references from it. To pin a release, rebuild, or build any reference by
 hand, see **[docs/databases.md](docs/databases.md)**.
 
+## Test the install
+
+Run the bundled mocks to confirm each path end to end. `--classifier all` is
+marker-aware: it runs all three classifiers for whichever marker the profile sets
+(16S → BLCA + Emu + NB; ITS → BLCA + EMITS + NB).
+
+```
+nextflow run . -profile test,singularity     --classifier all   # 16S mock  (GTDB)
+nextflow run . -profile test_its,singularity --classifier all   # fungal ITS mock (UNITE)
+```
+
+Swap `singularity` for `docker` on a laptop, or `standard` for conda. Each
+classifier needs its database built; on the first run the launcher builds them
+automatically (16S: GTDB BLCA/Emu/NB; ITS: UNITE, from a release you download).
+
 ## Offline / air-gapped HPC
 
 On compute nodes with no internet, pre-stage the container images on a login
