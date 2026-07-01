@@ -1,0 +1,16 @@
+# Conda env for the ITS extraction branch (modules/itsx.nf, marker==ITS read prep).
+# itsxrust pulls the fungal ITS region out of the cutadapt-trimmed HiFi reads
+# (full ITS, hifi preset, --derep) before DADA2 denoising. MIT licensed
+# (https://github.com/ayobi/itsxrust). Containerised profiles use itsx_container.
+#
+# itsxrust is on bioconda (anaconda.org/bioconda/itsxrust); it shells out to nhmmer
+# (HMMER, to locate the SSU/LSU anchors) and uses minimap2 for the HiFi preset, so
+# both runtime tools are pulled in alongside it.
+name: hifitax_itsx
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - itsxrust>=0.2.2
+  - hmmer>=3.3
+  - minimap2>=2.24

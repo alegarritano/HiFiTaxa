@@ -99,3 +99,42 @@ process nb_classify_fasta {
         ${genus_db} ${species_db} ${params.nb_min_bootstrap}
     """
 }
+
+// Single-step DADA2 NB for ITS (marker==ITS). Unlike the two-step GTDB path above
+// (genus assignTaxonomy + exact-match addSpecies), ITS runs ONE assignTaxonomy()
+// straight to Species (7 ranks: Kingdom..Species) against a UNITE reference that
+// already carries the full species lineage in its headers — NO addSpecies, which
+// collapses to ~0 species on the extracted ITS region. The R companion
+// (scripts/dada2_assign_tax_singlestep.R) writes both outputs to the work dir:
+//   best_taxonomy.tsv : QIIME2 TSVTaxonomyFormat (Feature ID, Taxon, Confidence)
+//   nb_singlestep.tsv : per-ASV 7-rank table (Feature ID + Kingdom..Species)
+//
+// Inputs:
+//   asv_seq_fasta : dada2_ASV.fasta from filter_dada2 (or a standalone query FASTA)
+//   singlestep_db : 7-rank UNITE DADA2 reference (params.unite_dada2_singlestep_db,
+//                   built by bin/build_unite_dada2_db.sh)
+//   assign_script : bundled scripts/dada2_assign_tax_singlestep.R
+process nb_classify_singlestep {
+    container "quay.io/qiime2/amplicon@sha256:4038fd785bf4e76ddd6ec7a7f57abe94cdca6c5cd0a93d0924971a74eabd7cf2"
+    publishDir "${params.outdir}/taxonomy_nb", mode: params.publish_dir_mode
+    label 'cpu_def'
+
+    input:
+    path asv_seq_fasta
+    path singlestep_db
+    path assign_script
+
+    output:
+    path "best_taxonomy.tsv", emit: best_nb_tax
+    path "nb_singlestep.tsv", emit: nb_tsv
+
+    script:
+    """
+    # QIIME2 image \$HOME is read-only; redirect caches DADA2 / R use.
+    export HOME="\$PWD/.dada2_home"
+    mkdir -p "\$HOME"
+
+    Rscript --vanilla ${assign_script} ${asv_seq_fasta} ${task.cpus} \\
+        ${singlestep_db} ${params.nb_min_bootstrap}
+    """
+}

@@ -1,0 +1,87 @@
+<svg viewBox="0 0 920 580" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">HiFiTaxa marker-aware pipeline</title>
+  <desc id="d">Raw PacBio HiFi reads pass a shared quality and primer-trimming front end, then split by marker: 16S goes DADA2 to GTDB classifiers, ITS goes itsxrust extraction then DADA2 to UNITE classifiers.</desc>
+  <style>
+    .box{stroke-width:1.5;rx:7}
+    .lbl{font-size:13px;fill:#1a1a1a;text-anchor:middle}
+    .sub{font-size:11px;fill:#555;text-anchor:middle}
+    .hd{font-size:12px;font-weight:bold;text-anchor:middle}
+    .arr{stroke:#888;stroke-width:1.6;fill:none;marker-end:url(#a)}
+    .ttl{font-size:18px;font-weight:bold;fill:#1a1a1a;text-anchor:middle}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#888"/>
+    </marker>
+  </defs>
+
+  <text x="460" y="30" class="ttl">HiFiTaxa marker-aware pipeline</text>
+
+  <!-- shared front end -->
+  <rect x="350" y="46" width="220" height="40" class="box" fill="#eeeeee" stroke="#999"/>
+  <text x="460" y="63" class="lbl">Raw PacBio HiFi reads</text>
+  <text x="460" y="79" class="sub">one FASTQ per sample</text>
+
+  <rect x="350" y="108" width="220" height="44" class="box" fill="#eeeeee" stroke="#999"/>
+  <text x="460" y="126" class="lbl">Quality filter + cutadapt</text>
+  <text x="460" y="142" class="sub">primer removal</text>
+
+  <text x="460" y="178" class="hd" fill="#333">marker = 16S | ITS</text>
+
+  <path class="arr" d="M460,86 L460,108"/>
+  <path class="arr" d="M460,152 L460,166"/>
+  <!-- split -->
+  <path class="arr" d="M430,184 C360,196 250,196 250,212"/>
+  <path class="arr" d="M490,184 C600,196 680,196 680,212"/>
+
+  <!-- 16S branch (blue) -->
+  <rect x="150" y="214" width="200" height="40" class="box" fill="#cfe3f1" stroke="#0072B2"/>
+  <text x="250" y="231" class="lbl">DADA2 denoise-ccs</text>
+  <text x="250" y="247" class="sub">min 1000 / max 1600 bp</text>
+
+  <rect x="190" y="296" width="120" height="34" class="box" fill="#cfe3f1" stroke="#0072B2"/>
+  <text x="250" y="318" class="lbl">ASVs</text>
+
+  <rect x="130" y="372" width="240" height="74" class="box" fill="#cfe3f1" stroke="#0072B2"/>
+  <text x="250" y="392" class="hd" fill="#0072B2">Classify vs GTDB SSU</text>
+  <text x="250" y="412" class="lbl">BLCA · Emu · NB</text>
+  <text x="250" y="430" class="sub">NB two-step (genus + addSpecies)</text>
+
+  <path class="arr" d="M250,254 L250,296"/>
+  <path class="arr" d="M250,330 L250,372"/>
+
+  <!-- ITS branch (green) -->
+  <rect x="580" y="214" width="200" height="40" class="box" fill="#cfeee4" stroke="#009E73"/>
+  <text x="680" y="231" class="lbl">itsxrust ITS extraction</text>
+  <text x="680" y="247" class="sub">HMM-anchored, primer-agnostic</text>
+
+  <rect x="580" y="278" width="200" height="40" class="box" fill="#cfeee4" stroke="#009E73"/>
+  <text x="680" y="295" class="lbl">DADA2 denoise-ccs</text>
+  <text x="680" y="311" class="sub">min 200 / max 1300 bp</text>
+
+  <rect x="620" y="342" width="120" height="34" class="box" fill="#cfeee4" stroke="#009E73"/>
+  <text x="680" y="364" class="lbl">ASVs</text>
+
+  <rect x="560" y="392" width="240" height="74" class="box" fill="#cfeee4" stroke="#009E73"/>
+  <text x="680" y="412" class="hd" fill="#009E73">Classify vs UNITE</text>
+  <text x="680" y="432" class="lbl">BLCA · EMITS · NB</text>
+  <text x="680" y="450" class="sub">NB single-step (7-rank)</text>
+
+  <path class="arr" d="M680,254 L680,278"/>
+  <path class="arr" d="M680,318 L680,342"/>
+  <path class="arr" d="M680,376 L680,392"/>
+
+  <!-- converge to output -->
+  <rect x="340" y="506" width="240" height="44" class="box" fill="#eeeeee" stroke="#999"/>
+  <text x="460" y="524" class="lbl">Taxonomy + abundance tables</text>
+  <text x="460" y="540" class="sub">per-ASV lineage, per-sample counts</text>
+
+  <path class="arr" d="M250,446 C250,490 360,500 380,508"/>
+  <path class="arr" d="M680,466 C680,494 560,500 540,508"/>
+
+  <!-- legend -->
+  <rect x="40" y="506" width="14" height="14" fill="#cfe3f1" stroke="#0072B2"/>
+  <text x="60" y="518" font-size="11" fill="#555">16S / GTDB</text>
+  <rect x="40" y="528" width="14" height="14" fill="#cfeee4" stroke="#009E73"/>
+  <text x="60" y="540" font-size="11" fill="#555">ITS / UNITE</text>
+</svg>

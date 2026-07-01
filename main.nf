@@ -26,7 +26,10 @@ include { learn_error; dada2_denoise; dada2_denoise_with_error_model } from './m
 include { mergeASV; filter_dada2; dada2_qc } from './modules/dada2'
 include { blca_classify; merge_blca } from './modules/taxonomy_blca'
 include { emu_classify; emu_collate } from './modules/emu'
-include { nb_classify; nb_classify_fasta } from './modules/taxonomy_nb'
+include { nb_classify; nb_classify_fasta; nb_classify_singlestep } from './modules/taxonomy_nb'
+// --- marker==ITS read-prep + taxonomy modules ---
+include { itsx_extract } from './modules/itsx'
+include { emits_classify } from './modules/taxonomy_emits'
 
 // ---- classifier selection ------------------------------------------------
 // --classifier accepts a single name, a comma-separated list, or the shorthands
@@ -74,15 +77,36 @@ if (params.skip_primer_trim) {
     dynamic_forward_primer = params.forward_primer; dynamic_reverse_primer = params.reverse_primer; trim_cutadapt = "Yes"
 }
 
+// ---- marker awareness ----------------------------------------------------
+// marker drives primers, length window, reference DB, read-prep, NB design and
+// the read-level EM classifier. Validate up front; default '16S' keeps the
+// classic GTDB behaviour, 'ITS' switches the whole fungal path on.
+def MARKER = params.marker.toString().toUpperCase().trim()
+if (!(MARKER in ['16S', 'ITS'])) {
+    exit 1, "ERROR: unknown --marker '${params.marker}'; must be '16S' or 'ITS'."
+}
+def is_its = (MARKER == 'ITS')
+def reference_name = is_its ? 'UNITE (db_unite)' : 'GTDB (db)'
+def read_em_name   = is_its ? 'EMITS' : 'Emu'
+def nb_design_name = is_its ? 'single-step (7-rank assignTaxonomy, no addSpecies)'
+                            : 'two-step (genus assignTaxonomy + exact-match addSpecies)'
+def read_prep_name = is_its ? 'cutadapt -> itsxrust ITS extraction -> DADA2'
+                            : 'cutadapt -> DADA2'
+
 log_text = """
   HiFiTaxa pipeline
   =======================
   Samples in TSV:            $n_sample
+  Marker:                    $MARKER
+  Reference:                 $reference_name
+  Read prep:                 $read_prep_name
   Filter reads above Q:      $params.filterQ
   Trim primers (cutadapt):   $trim_cutadapt
   Forward primer:            $params.forward_primer
   Reverse primer:            $params.reverse_primer
   Classifier(s):             ${selected.join(',')}
+  NB design:                 $nb_design_name
+  Read-level EM classifier:  $read_em_name
   --- DADA2 (needed for BLCA + NB) ---
   DADA2 min/max len:         $params.min_len / $params.max_len
   DADA2 maxEE / minQ:        $params.max_ee / $params.minQ
@@ -131,9 +155,19 @@ workflow {
 
     if (params.skip_primer_trim) {
         reads_for_emu        = QC_fastq.out.filtered_fastq
-        filtered_fastq_files = QC_fastq.out.filtered_fastq_files
+        // marker==ITS still gets the itsxrust ITS extraction before import (only the
+        // cutadapt primer trim is skipped); 16S is unchanged.
+        def reads_for_import_skip
+        if (is_its) {
+            itsx_extract(QC_fastq.out.filtered_fastq)
+            reads_for_import_skip = itsx_extract.out.fastq
+            filtered_fastq_files  = itsx_extract.out.fastq.map { sid, fq -> fq }
+        } else {
+            reads_for_import_skip = QC_fastq.out.filtered_fastq
+            filtered_fastq_files  = QC_fastq.out.filtered_fastq_files
+        }
         if (run_blca) {
-            prepare_qiime2_manifest_skip_cutadapt(QC_fastq.out.filtered_fastq.collect(), metadata_file)
+            prepare_qiime2_manifest_skip_cutadapt(reads_for_import_skip.collect(), metadata_file)
             qiime2_manifest = prepare_qiime2_manifest_skip_cutadapt.out.sample_trimmed_file.flatten()
             import_qiime2(qiime2_manifest, filtered_fastq_files.collect())
         }
@@ -143,10 +177,25 @@ workflow {
         // primer-removal stats, printed to the log right after cutadapt
         cutadapt_stats(cutadapt.out.summary_tocollect.collect())
         cutadapt_stats.out.stats.splitText().view { "[primer-removal] " + it.trim() }
+        // EMITS/Emu profile the (cutadapt-trimmed) reads directly — they do NOT use
+        // the itsxrust ITS extraction, which is a DADA2-only read prep.
         reads_for_emu        = cutadapt.out.cutadapt_fastq
-        filtered_fastq_files = cutadapt.out.cutadapt_fastq_files
+
+        // marker==ITS read prep: pull the full ITS span out of the trimmed reads with
+        // itsxrust BEFORE the QIIME2 import, so DADA2 denoises ITS-only sequences.
+        // 16S keeps the current cutadapt -> import path. Channel names downstream are
+        // identical; only the source (cutadapt vs itsx_extract) differs.
+        def reads_for_import
+        if (is_its) {
+            itsx_extract(cutadapt.out.cutadapt_fastq)
+            reads_for_import     = itsx_extract.out.fastq
+            filtered_fastq_files = itsx_extract.out.fastq.map { sid, fq -> fq }
+        } else {
+            reads_for_import     = cutadapt.out.cutadapt_fastq
+            filtered_fastq_files = cutadapt.out.cutadapt_fastq_files
+        }
         if (run_blca) {
-            prepare_qiime2_manifest(cutadapt.out.cutadapt_fastq.collect(), metadata_file)
+            prepare_qiime2_manifest(reads_for_import.collect(), metadata_file)
             qiime2_manifest = prepare_qiime2_manifest.out.sample_trimmed_file.flatten()
             import_qiime2(qiime2_manifest, filtered_fastq_files.collect())
         }
@@ -186,26 +235,41 @@ workflow {
         merge_blca(blca_classify.out.blca_out.collect())
     }
 
-    // ---------------- NB branch (DADA2 two-step, GTDB-only) -------------------
-    // genus-level assignTaxonomy() (bootstrap) + exact-match addSpecies(), against
-    // the same full GTDB release as BLCA/Emu. See scripts/dada2_assign_tax.R.
+    // ---------------- NB branch ------------------------------------------------
+    // 16S: DADA2 two-step (genus assignTaxonomy bootstrap + exact-match addSpecies)
+    //      against the same full GTDB release as BLCA/Emu (scripts/dada2_assign_tax.R).
+    // ITS: DADA2 single-step (one 7-rank assignTaxonomy straight to Species, NO
+    //      addSpecies) against the UNITE reference (scripts/dada2_assign_tax_singlestep.R).
     if (run_nb) {
-        genus_ch   = channel.fromPath(params.gtdb_dada2_genus_db,   checkIfExists: true)
-        species_ch = channel.fromPath(params.gtdb_dada2_species_db, checkIfExists: true)
-        r_script   = channel.fromPath(params.dadaAssign_script,     checkIfExists: true)
-        nb_classify(filter_dada2.out.asv_seq_fasta,
-                    filter_dada2.out.asv_seq,
-                    filter_dada2.out.asv_freq,
-                    genus_ch, species_ch, r_script)
+        if (is_its) {
+            singlestep_ch = channel.fromPath(params.unite_dada2_singlestep_db,   checkIfExists: true)
+            r_script_ss   = channel.fromPath(params.dadaAssignSinglestep_script, checkIfExists: true)
+            nb_classify_singlestep(filter_dada2.out.asv_seq_fasta,
+                                   singlestep_ch, r_script_ss)
+        } else {
+            genus_ch   = channel.fromPath(params.gtdb_dada2_genus_db,   checkIfExists: true)
+            species_ch = channel.fromPath(params.gtdb_dada2_species_db, checkIfExists: true)
+            r_script   = channel.fromPath(params.dadaAssign_script,     checkIfExists: true)
+            nb_classify(filter_dada2.out.asv_seq_fasta,
+                        filter_dada2.out.asv_seq,
+                        filter_dada2.out.asv_freq,
+                        genus_ch, species_ch, r_script)
+        }
     }
 
-    // ---------------- Emu branch (trimmed + length-filtered reads -> EM profiling) ----------------
-    // Length-filter to the same min_len/max_len window DADA2 enforces, so Emu and
-    // the BLCA/NB ASV branch classify identically filtered reads.
+    // ---------------- Read-level EM branch (trimmed + length-filtered reads) ------
+    // Length-filter to the same min_len/max_len window DADA2 enforces, so the EM
+    // profiler and the ASV branch classify identically filtered reads.
+    //   16S -> Emu  (minimap2 + EM vs GTDB-Emu DB)
+    //   ITS -> EMITS (minimap2 map-hifi + emits run vs the staged UNITE FASTA)
     if (run_emu) {
         length_filter(reads_for_emu, params.min_len, params.max_len)
-        emu_classify(length_filter.out.filtered)
-        emu_collate(emu_classify.out.abundance.collect())
+        if (is_its) {
+            emits_classify(length_filter.out.filtered)
+        } else {
+            emu_classify(length_filter.out.filtered)
+            emu_collate(emu_classify.out.abundance.collect())
+        }
     }
 }
 
