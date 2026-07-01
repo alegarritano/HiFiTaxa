@@ -1,10 +1,11 @@
-# Databases (GTDB, Emu, NB references)
+# Databases (GTDB/Emu/NB for 16S, UNITE for ITS)
 
 [← back to README](../README.md)
 
-All three classifiers share one GTDB reference build (default release r232). On
-the first run the preflight builds it automatically; the sections below cover
-pinning a release and building each reference by hand.
+All three 16S classifiers share one GTDB reference build (default release r232).
+On the first run the preflight builds it automatically; the sections below cover
+pinning a release and building each reference by hand. For the ITS marker, UNITE
+replaces GTDB (see [UNITE references](#unite-references-its-marker) at the end).
 
 ## Build everything interactively
 
@@ -102,3 +103,55 @@ This needs only `python3` (no `qiime`, no container). The genus level reference
 is used for `assignTaxonomy` because the full species lineage does not scale to
 GTDB r232 (about 82k species labels dilute the bootstrap to Kingdom only);
 species is then recovered by exact match `addSpecies`.
+
+## UNITE references (ITS marker)
+
+With `--marker ITS` the pipeline classifies fungal ITS against UNITE instead of
+GTDB. Three references are built into `--unite_db_dir` (default `db_unite/`) from
+one UNITE general FASTA release, so BLCA, the single-step NB, and EMITS all anchor
+on the same sequences:
+
+- `unite_BLCAparsed.fasta` (+ BLAST index) and `unite_BLCAparsed.taxonomy`, for BLCA
+- `unite_full_singlestep_ref.fa.gz` (full 7-rank lineage headers), for the single-step ITS Naive-Bayes
+- `unite.fasta` (the raw UNITE release, staged verbatim), as the EMITS minimap2 target
+- `UNITE_VERSION.txt`, recording the release tag
+
+Unlike GTDB, UNITE has no machine-readable release API, so there is no
+auto-download: you fetch the FASTA yourself. Download the **general FASTA release
+for Fungi** from the UNITE repository page and pick the `Current` row (version
+10.0, 2025-02-19 at time of writing):
+
+<https://unite.ut.ee/repository.php>
+
+On the first ITS run the preflight prints that link, asks for the path to your
+downloaded `sh_general_release_dynamic_*.fasta`, and builds the three references
+from it. Non interactively (batch/HPC), pass the path with `--unite-fasta <path>`;
+`--skip-gtdb-check` uses whatever is already in `db_unite/` as-is.
+
+Build by hand (the three primitives the preflight calls):
+
+```
+FASTA=~/Downloads/sh_general_release_dynamic_19.02.2025.fasta
+bash bin/build_unite_blca_db.sh  "$FASTA" db_unite 0    # 0 keeps all refs; a number drops shorter ones
+bash bin/build_unite_dada2_db.sh db_unite/unite_BLCAparsed.fasta db_unite/unite_BLCAparsed.taxonomy db_unite/unite_full_singlestep_ref.fa.gz
+bash bin/build_emits_db.sh       "$FASTA" db_unite
+```
+
+These need only the driver env (`makeblastdb`, `python3`); no container, no
+`qiime`. ITS uses a single-step Naive-Bayes (one `assignTaxonomy` straight to
+species against the 7-rank reference) because UNITE species are largely
+sequence-disjoint, so the two-step `addSpecies` recovery that 16S uses does not
+apply.
+
+### On an HPC with offline compute nodes (e.g. Gadi)
+
+Prepare `db_unite/` on a login node before the job, the same as GTDB. Either build
+it there from a FASTA you have copied across (the block above), or transfer a
+`db_unite/` you built elsewhere:
+
+```
+# copy a prebuilt db_unite/ (-L dereferences the unite.fasta symlink)
+rsync -avL db_unite/ user@gadi-dm.nci.org.au:/scratch/<proj>/$USER/HiFiTaxa/db_unite/
+```
+
+See [gadi.md](gadi.md) for the full offline workflow.
