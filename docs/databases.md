@@ -142,16 +142,3 @@ These need only the driver env (`makeblastdb`, `python3`); no container, no
 species against the 7-rank reference) because UNITE species are largely
 sequence-disjoint, so the two-step `addSpecies` recovery that 16S uses does not
 apply.
-
-### On an HPC with offline compute nodes (e.g. Gadi)
-
-Prepare `db_unite/` on a login node before the job, the same as GTDB. Either build
-it there from a FASTA you have copied across (the block above), or transfer a
-`db_unite/` you built elsewhere:
-
-```
-# copy a prebuilt db_unite/ (-L dereferences the unite.fasta symlink)
-rsync -avL db_unite/ user@gadi-dm.nci.org.au:/scratch/<proj>/$USER/HiFiTaxa/db_unite/
-```
-
-See [gadi.md](gadi.md) for the full offline workflow.
