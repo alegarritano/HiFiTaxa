@@ -14,6 +14,10 @@ handles two markers, selected with `--marker`:
 
 See **[docs/MARKER_AWARE.md](docs/MARKER_AWARE.md)** for the full marker design.
 
+<p align="center">
+  <img src="docs/pipeline.png" alt="HiFiTaxa pipeline overview: 16S and ITS paths through QC, read prep, and the BLCA / Emu / EMITS / Naive Bayes classifiers" width="100%">
+</p>
+
 ## Requirements
 
 - Nextflow 24.04 to 24.x (the launcher pins 24.10.9; Nextflow 25/26 will not parse the config)
@@ -94,7 +98,7 @@ python bin/run_pipeline.py --asv_fasta my_ASVs.fasta --classifier all --outdir t
 Each classifier writes a per-sequence taxonomy; see
 **[docs/parameters.md](docs/parameters.md)** for the per-branch outputs and caveats.
 
-## Classifier choice (BLCA, Emu, DADA2 NB)
+## Classifier choice (BLCA, Emu/EMITS, DADA2 NB)
 
 The pipeline can classify ASVs or reads with any combination of three
 classifiers, all anchored on the same GTDB release:
@@ -123,12 +127,17 @@ Pick with `--classifier`: a single name, a comma list, or a shorthand. For 16S,
 `all` expands to `blca,emu,nb`; `both` expands to `blca,emu` (kept for back compat):
 
 ```
+# 16S (default marker)
 python bin/run_pipeline.py --input samples.tsv --metadata metadata.tsv \
   --classifier blca            # default: DADA2 then BLCA / GTDB
 # or  --classifier emu         # trimmed reads then Emu / GTDB
 # or  --classifier nb          # DADA2 ASVs then DADA2 NB genus + addSpecies (aliases: dada2_nb, qiime2_nb)
-# or  --classifier blca,emu    # both (legacy 'both' still works)
-# or  --classifier all         # run all three branches
+# or  --classifier all         # run all three branches (blca,emu,nb; 'both' = blca,emu still works)
+
+# fungal ITS: EMITS is the default (read-level, on itsxrust reads; no DADA2)
+python bin/run_pipeline.py --marker ITS --input samples.tsv --metadata metadata.tsv
+# or  --marker ITS --classifier blca        # also classify the itsxrust ASVs with BLCA / UNITE
+# or  --marker ITS --classifier emits,nb    # EMITS + single-step Naive Bayes
 ```
 
 The three complement each other: BLCA gives per rank bootstrap confidence on
