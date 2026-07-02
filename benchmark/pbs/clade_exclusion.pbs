@@ -78,7 +78,8 @@ if [ "$MARKER" = "16S" ]; then
     "$DEP/gtdb_ssu_dada2_genus.fa.gz" "$DEP/gtdb_ssu_dada2_species.fa.gz"
   # Emu is NOT in the HiFiTaxa env; build the depleted Emu DB inside the cached
   # Emu image (offline-safe, mirrors run_pipeline.py:preflight_emu).
-  EMU_SIF=$(ls "$NXF_SINGULARITY_CACHEDIR"/*emu*.img "$NXF_SINGULARITY_CACHEDIR"/*emu*.sif 2>/dev/null | head -1)
+  shopt -s nullglob; _emu=( "$NXF_SINGULARITY_CACHEDIR"/*emu*.img "$NXF_SINGULARITY_CACHEDIR"/*emu*.sif ); shopt -u nullglob
+  EMU_SIF="${_emu[0]:-}"   # nullglob array, not ls|head: ls exits 2 on an unmatched glob and set -e would kill the job
   [ -n "$EMU_SIF" ] || { echo "ERROR: Emu image not in $NXF_SINGULARITY_CACHEDIR — pull it on a login node (docs/gadi.md step 4)" >&2; exit 1; }
   singularity exec --bind "$REPO" --bind "$DEP" "$EMU_SIF" \
     bash bin/build_gtdb_emu_db.sh "$DEP/gtdb_ssu_BLCAparsed.fasta" "$DEP/gtdb_ssu_BLCAparsed.taxonomy" "$DEP/emu"
