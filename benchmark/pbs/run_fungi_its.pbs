@@ -82,7 +82,7 @@ PRIMER_ARGS=()
 python bin/run_pipeline.py --marker ITS \
   --input "$SAMPLES" --metadata "$METADATA" \
   --classifier "$CLASSIFIER" \
-  --skip-gtdb-check \
+  --skip-gtdb-check --skip-test \
   --profile singularity --publish_dir_mode copy \
   --outdir "$OUTDIR" \
   "${PRIMER_ARGS[@]}"

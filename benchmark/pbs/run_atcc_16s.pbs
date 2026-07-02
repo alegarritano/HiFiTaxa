@@ -65,7 +65,7 @@ echo "[run] $n samples from $READS_DIR"
 python bin/run_pipeline.py \
   --input "$SAMPLES" --metadata "$METADATA" \
   --classifier "$CLASSIFIER" \
-  --skip-gtdb-check --skip-emu-db-check --skip-nb-classifier-check \
+  --skip-gtdb-check --skip-emu-db-check --skip-nb-classifier-check --skip-test \
   --profile singularity --publish_dir_mode copy \
   --outdir "$OUTDIR"
 
