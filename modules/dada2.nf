@@ -161,6 +161,7 @@ process filter_dada2 {
     path "dada2-ccs_rep_filtered.qza", emit: asv_seq
     path "dada2-ccs_table_filtered.qza", emit: asv_freq
     path "dada2_ASV.fasta", emit:asv_seq_fasta
+    path "feature_table.tsv", emit: asv_freq_tsv
 
     script:
     """
@@ -200,8 +201,12 @@ process filter_dada2 {
     qiime tools export --input-path dada2-ccs_rep_filtered.qza \
         --output-path .
     mv dna-sequences.fasta dada2_ASV.fasta
-    """
-}
+
+    # ASV x sample frequency table as TSV (both markers). The single-step ITS NB
+    # emits no merged freq table, so downstream read-count / false-positive
+    # filtering had nothing to use on fungal runs; export it here for everyone.
+    qiime tools export --input-path dada2-ccs_table_filtered.qza --output-path _ftexport
+    biom convert -i _ftexport/feature-table.biom -o feature_table.tsv --to-tsv
 
 process dada2_qc {
     conda (params.enable_conda ? "$projectDir/env/qiime2-amplicon-2024.10-py310-ubuntu-conda.yml" : null)
