@@ -42,23 +42,30 @@ export NXF_OFFLINE=true
 SAMPLES="$OUTDIR/samples.tsv"
 METADATA="$OUTDIR/metadata.tsv"
 mkdir -p "$OUTDIR"
+shopt -s nullglob
 {
   printf 'sample-id\tabsolute-filepath\n'
-  for f in "$READS_DIR"/*.fastq.gz; do
-    printf '%s\t%s\n' "$(basename "$f" .fastq.gz)" "$f"
+  for f in "$READS_DIR"/*.fastq.gz "$READS_DIR"/*.fq.gz; do
+    printf '%s\t%s\n' "$(basename "$f" | sed -E 's/\.(fastq|fq)\.gz$//')" "$f"
   done
 } > "$SAMPLES"
+shopt -u nullglob
+n=$(( $(wc -l < "$SAMPLES") - 1 ))
+[ "$n" -ge 1 ] || { echo "[run] ERROR: no *.fastq.gz/*.fq.gz reads in $READS_DIR" >&2; exit 2; }
 {
   printf 'sample_name\tcondition\n'
   tail -n +2 "$SAMPLES" | cut -f1 | while read -r s; do printf '%s\tatcc\n' "$s"; done
 } > "$METADATA"
-echo "[run] $(($(wc -l < "$SAMPLES") - 1)) samples from $READS_DIR"
+echo "[run] $n samples from $READS_DIR"
 
 # --- run the pipeline (16S marker; GTDB references from docs/gadi.md step 5)-
+# --classifier all = blca,emu,nb. --skip-gtdb-check does NOT skip the Emu/NB DB
+# preflights, so db_emu/ and db_nb/ must already exist (docs/gadi.md step 5) and
+# we tell the launcher to use them as-is rather than try to (re)build.
 python bin/run_pipeline.py \
   --input "$SAMPLES" --metadata "$METADATA" \
   --classifier "$CLASSIFIER" \
-  --skip-gtdb-check \
+  --skip-gtdb-check --skip-emu-db-check --skip-nb-classifier-check \
   --profile singularity --publish_dir_mode copy \
   --outdir "$OUTDIR"
 

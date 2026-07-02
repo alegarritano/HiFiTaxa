@@ -52,10 +52,14 @@ export NXF_OFFLINE=true
 # --- build samples.tsv + metadata.tsv from the reads directory -------------
 mkdir -p "$OUTDIR"
 SAMPLES="$OUTDIR/samples.tsv"; METADATA="$OUTDIR/metadata.tsv"
+shopt -s nullglob
 {
   printf 'sample-id\tabsolute-filepath\n'
-  for f in "$READS_DIR"/*.fastq.gz; do printf '%s\t%s\n' "$(basename "$f" .fastq.gz)" "$f"; done
+  for f in "$READS_DIR"/*.fastq.gz "$READS_DIR"/*.fq.gz; do
+    printf '%s\t%s\n' "$(basename "$f" | sed -E 's/\.(fastq|fq)\.gz$//')" "$f"
+  done
 } > "$SAMPLES"
+shopt -u nullglob
 [ "$(wc -l < "$SAMPLES")" -gt 1 ] || { echo "ERROR: no *.fastq.gz in $READS_DIR (gzip .fastq first)" >&2; exit 1; }
 { printf 'sample_name\tcondition\n'
   tail -n +2 "$SAMPLES" | cut -f1 | while read -r s; do printf '%s\tmock\n' "$s"; done
@@ -72,11 +76,23 @@ if [ "$MARKER" = "16S" ]; then
   makeblastdb -in "$DEP/gtdb_ssu_BLCAparsed.fasta" -dbtype nucl -parse_seqids -out "$DEP/gtdb_ssu_BLCAparsed.fasta"
   bash bin/build_gtdb_dada2_db.sh "$DEP/gtdb_ssu_BLCAparsed.fasta" "$DEP/gtdb_ssu_BLCAparsed.taxonomy" \
     "$DEP/gtdb_ssu_dada2_genus.fa.gz" "$DEP/gtdb_ssu_dada2_species.fa.gz"
-  bash bin/build_gtdb_emu_db.sh "$DEP/gtdb_ssu_BLCAparsed.fasta" "$DEP/gtdb_ssu_BLCAparsed.taxonomy" "$DEP/emu"
+  # Emu is NOT in the HiFiTaxa env; build the depleted Emu DB inside the cached
+  # Emu image (offline-safe, mirrors run_pipeline.py:preflight_emu).
+  EMU_SIF=$(ls "$NXF_SINGULARITY_CACHEDIR"/*emu*.img "$NXF_SINGULARITY_CACHEDIR"/*emu*.sif 2>/dev/null | head -1)
+  [ -n "$EMU_SIF" ] || { echo "ERROR: Emu image not in $NXF_SINGULARITY_CACHEDIR — pull it on a login node (docs/gadi.md step 4)" >&2; exit 1; }
+  singularity exec --bind "$REPO" --bind "$DEP" "$EMU_SIF" \
+    bash bin/build_gtdb_emu_db.sh "$DEP/gtdb_ssu_BLCAparsed.fasta" "$DEP/gtdb_ssu_BLCAparsed.taxonomy" "$DEP/emu"
   # --- classify the mock reads against the depleted DB ---------------------
+  # Pass every leaf DB path explicitly: the top-config-block params
+  # (gtdb_dada2_genus_db/species_db) don't re-derive from a CLI --nb_db_dir override.
   nextflow run . -profile singularity \
     --input "$SAMPLES" --metadata "$METADATA" --classifier all \
-    --gtdb_db_dir "$DEP" --nb_db_dir "$DEP" --emu_db_dir "$DEP/emu" \
+    --gtdb_db_dir "$DEP" \
+    --blca_db  "$DEP/gtdb_ssu_BLCAparsed.fasta" \
+    --blca_tax "$DEP/gtdb_ssu_BLCAparsed.taxonomy" \
+    --gtdb_dada2_genus_db   "$DEP/gtdb_ssu_dada2_genus.fa.gz" \
+    --gtdb_dada2_species_db "$DEP/gtdb_ssu_dada2_species.fa.gz" \
+    --emu_db_dir "$DEP/emu" \
     --random_seed "$SEED" --publish_dir_mode copy --outdir "$OUTDIR"
 else
   # --- deplete the BLCA-parsed UNITE reference (BLCA + NB) ------------------
@@ -92,10 +108,21 @@ else
     --in-fasta db_unite/unite.fasta \
     --exclude-species "$EXCLUDE_LIST" "${COLARG[@]}" \
     --out-fasta "$DEP/unite.fasta"
+  # ITS classifiers (itsxrust extraction, EMITS) run via conda under -profile
+  # singularity; the offline compute node can't build them, so require them prestaged.
+  for e in itsxrust emits; do
+    [ -d "$REPO/conda_envs/$e" ] || { echo "ERROR: $REPO/conda_envs/$e missing — build on a login node (docs/gadi.md step 4): mamba env create -f envs/$e.yml -p \$PWD/conda_envs/$e" >&2; exit 1; }
+  done
   # --- classify the mock reads against the depleted DB (marker-aware) ------
+  # Pass every leaf DB path explicitly: the top-config-block params (emits_db,
+  # unite_dada2_singlestep_db) don't re-derive from a CLI --unite_db_dir override.
   nextflow run . -profile singularity --marker ITS \
     --input "$SAMPLES" --metadata "$METADATA" --classifier all \
     --unite_db_dir "$DEP" \
+    --blca_db  "$DEP/unite_BLCAparsed.fasta" \
+    --blca_tax "$DEP/unite_BLCAparsed.taxonomy" \
+    --emits_db "$DEP/unite.fasta" \
+    --unite_dada2_singlestep_db "$DEP/unite_full_singlestep_ref.fa.gz" \
     --random_seed "$SEED" --publish_dir_mode copy --outdir "$OUTDIR"
 fi
 

@@ -52,17 +52,27 @@ export NXF_OFFLINE=true
 SAMPLES="$OUTDIR/samples.tsv"
 METADATA="$OUTDIR/metadata.tsv"
 mkdir -p "$OUTDIR"
+shopt -s nullglob
 {
   printf 'sample-id\tabsolute-filepath\n'
-  for f in "$READS_DIR"/*.fastq.gz; do
-    printf '%s\t%s\n' "$(basename "$f" .fastq.gz)" "$f"
+  for f in "$READS_DIR"/*.fastq.gz "$READS_DIR"/*.fq.gz; do
+    printf '%s\t%s\n' "$(basename "$f" | sed -E 's/\.(fastq|fq)\.gz$//')" "$f"
   done
 } > "$SAMPLES"
+shopt -u nullglob
+n=$(( $(wc -l < "$SAMPLES") - 1 ))
+[ "$n" -ge 1 ] || { echo "[run] ERROR: no *.fastq.gz/*.fq.gz in $READS_DIR (gzip .fastq first)" >&2; exit 2; }
 {
   printf 'sample_name\tcondition\n'
   tail -n +2 "$SAMPLES" | cut -f1 | while read -r s; do printf '%s\tfungi\n' "$s"; done
 } > "$METADATA"
-echo "[run] $(($(wc -l < "$SAMPLES") - 1)) samples from $READS_DIR"
+echo "[run] $n samples from $READS_DIR"
+
+# ITS extraction (itsxrust) + EMITS run via conda under -profile singularity;
+# the offline node can't build them, so require them prestaged (docs/gadi.md step 4).
+for e in itsxrust emits; do
+  [ -d "$REPO/conda_envs/$e" ] || { echo "ERROR: $REPO/conda_envs/$e missing — build on a login node: mamba env create -f envs/$e.yml -p \$PWD/conda_envs/$e" >&2; exit 1; }
+done
 
 # --- run the pipeline (ITS marker; UNITE references from docs/gadi.md 5b) ---
 PRIMER_ARGS=()

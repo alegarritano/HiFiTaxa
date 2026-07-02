@@ -116,7 +116,7 @@ else
     --publish_dir_mode copy --outdir "$HOLDOUT/results"
 
   # --- 3c. single-step NB, run the R directly inside the QIIME2 image -------
-  QIIME2_SIF=$(ls "$NXF_SINGULARITY_CACHEDIR"/*qiime2*amplicon*.img 2>/dev/null | head -1)
+  QIIME2_SIF=$(ls "$NXF_SINGULARITY_CACHEDIR"/*qiime2*amplicon*.img "$NXF_SINGULARITY_CACHEDIR"/*qiime2*amplicon*.sif 2>/dev/null | head -1)
   [ -n "$QIIME2_SIF" ] || { echo "ERROR: QIIME2 .sif not found in $NXF_SINGULARITY_CACHEDIR" >&2; exit 1; }
   mkdir -p "$HOLDOUT/results/taxonomy_nb" "$HOLDOUT/results/taxonomy_nb/.rhome"
   ( cd "$HOLDOUT/results/taxonomy_nb"
