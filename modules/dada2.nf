@@ -207,6 +207,8 @@ process filter_dada2 {
     # filtering had nothing to use on fungal runs; export it here for everyone.
     qiime tools export --input-path dada2-ccs_table_filtered.qza --output-path _ftexport
     biom convert -i _ftexport/feature-table.biom -o feature_table.tsv --to-tsv
+    """
+}
 
 process dada2_qc {
     conda (params.enable_conda ? "$projectDir/env/qiime2-amplicon-2024.10-py310-ubuntu-conda.yml" : null)
