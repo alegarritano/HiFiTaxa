@@ -192,7 +192,7 @@ process prepare_qiime2_manifest {
         echo "Error: Metadata file is empty or does not exist"
         exit 1
     fi
-    poolyes=\$(csvtk headers -t $metadata | grep pool | wc -l)
+    poolyes=\$(csvtk headers -t $metadata | grep -c pool || true)   # grep exits 1 when no 'pool' column; guard so pipefail/set -e don't abort
     if [[ \$poolyes -eq 1 ]]
     then
         csvtk join -t samplefile.txt <(csvtk cut -t -f sample_name,pool $metadata) -f "sample-id;sample_name" | csvtk split -t -f pool
@@ -227,7 +227,7 @@ process prepare_qiime2_manifest_skip_cutadapt {
         echo "Error: Metadata file is empty or does not exist"
         exit 1
     fi
-    poolyes=\$(csvtk headers -t $metadata | grep pool | wc -l)
+    poolyes=\$(csvtk headers -t $metadata | grep -c pool || true)   # grep exits 1 when no 'pool' column; guard so pipefail/set -e don't abort
     if [[ \$poolyes -eq 1 ]]
     then
         csvtk join -t samplefile.txt <(csvtk cut -t -f sample_name,pool $metadata) -f "sample-id;sample_name" | csvtk split -t -f pool

@@ -220,9 +220,13 @@ optional.add_argument("-t", "--gap", default=10,
 optional.add_argument("-o", "--outfile", help="output file name. Default: <fasta>.blca.out", type=str)
 optional.add_argument("-p", "--proc", default=2,
                       help="how many processors are used in blastn step. Default: 2 processors", type=int)
+optional.add_argument("--seed", default=42,
+                      help="random seed for the bootstrap resampling (reproducibility). Default: 42", type=int)
 optional.add_argument("-h", "--help", help="show this help message and exit", action="help")
 ##### parse arguments #####
 args = parser.parse_args()
+##### seed the RNG so the bootstrap vote is reproducible across runs #####
+random.seed(args.seed)
 ##### Output file name ####
 if not args.outfile:
     args.outfile = args.fsa + ".blca.out"

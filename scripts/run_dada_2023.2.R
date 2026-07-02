@@ -287,7 +287,9 @@ for(fn in c(out.path, out.track)) {
 }
 
 # Convert nthreads to the logical/numeric expected by dada2
-if(nthreads < 0) {
+if(is.null(nthreads)) {
+  multithread <- TRUE # unspecified (--num_threads NULL) -> detect and use all
+} else if(nthreads < 0) {
   errQuit("nthreads must be non-negative.")
 } else if(nthreads == 0) {
   multithread <- TRUE # detect and use all
@@ -312,7 +314,7 @@ if(primer.removed.dir!='NULL'){ #for CCS read analysis
   if(primerF == 'none' && primerR == 'none'){
     nop <- unfilts
   } else {
-    prim <- suppressWarnings(removePrimers(unfilts, nop, primer, dada2:::rc(primerR),
+    prim <- suppressWarnings(removePrimers(unfilts, nop, primerF, dada2:::rc(primerR),
                                            max.mismatch = maxMismatch, allow.indels = indels,
                                            orient = TRUE, verbose = TRUE))
     cat(ifelse(file.exists(nop), ".", "x"), sep="")

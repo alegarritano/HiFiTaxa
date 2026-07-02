@@ -25,6 +25,7 @@ process blca_classify {
         -q ${params.blca_db} \\
         --iset ${params.blca_minid} \\
         -n ${params.blca_nper} \\
+        --seed ${params.random_seed} \\
         -p 1 \\
         -o ${asv_chunk.baseName}.blca.out
     """

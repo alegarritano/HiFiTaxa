@@ -47,7 +47,7 @@ process nb_classify {
     mkdir -p "\$HOME"
 
     Rscript --vanilla ${assign_script} ${asv_seq_fasta} ${task.cpus} \\
-        ${genus_db} ${species_db} ${params.nb_min_bootstrap}
+        ${genus_db} ${species_db} ${params.nb_min_bootstrap} ${params.random_seed}
 
     qiime feature-table transpose --i-table ${asv_freq} \\
         --o-transposed-feature-table transposed-asv.qza
@@ -96,7 +96,7 @@ process nb_classify_fasta {
     mkdir -p "\$HOME"
 
     Rscript --vanilla ${assign_script} ${asv_seq_fasta} ${task.cpus} \\
-        ${genus_db} ${species_db} ${params.nb_min_bootstrap}
+        ${genus_db} ${species_db} ${params.nb_min_bootstrap} ${params.random_seed}
     """
 }
 
@@ -135,6 +135,6 @@ process nb_classify_singlestep {
     mkdir -p "\$HOME"
 
     Rscript --vanilla ${assign_script} ${asv_seq_fasta} ${task.cpus} \\
-        ${singlestep_db} ${params.nb_min_bootstrap}
+        ${singlestep_db} ${params.nb_min_bootstrap} ${params.random_seed}
     """
 }

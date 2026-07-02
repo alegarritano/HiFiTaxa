@@ -185,7 +185,7 @@ process filter_dada2 {
     then
         qiime feature-table filter-features \
             --i-table $asv_table \
-            /para--p-min-frequency $min_asv_totalfreq \
+            --p-min-frequency $min_asv_totalfreq \
             --p-filter-empty-samples \
             --o-filtered-table dada2-ccs_table_filtered.qza
     else

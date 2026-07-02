@@ -36,9 +36,9 @@ library(dada2)
 
 args <- commandArgs(trailingOnly = TRUE)
 
-if (length(args) < 3 || length(args) > 4) {
+if (length(args) < 3 || length(args) > 5) {
   stop(
-    "Usage: Rscript dada2_assign_tax_singlestep.R <query.fasta> <cpus> <ref_db> <minBoot>",
+    "Usage: Rscript dada2_assign_tax_singlestep.R <query.fasta> <cpus> <ref_db> [minBoot=80] [seed=42]",
     call. = FALSE
   )
 }
@@ -46,7 +46,13 @@ if (length(args) < 3 || length(args) > 4) {
 seqs_path   <- args[1]
 threads     <- as.numeric(args[2])
 ref_db      <- args[3]
-minBoot_num <- if (length(args) == 4) as.numeric(args[4]) else 80
+minBoot_num <- if (length(args) >= 4) as.numeric(args[4]) else 80
+seed_num    <- if (length(args) >= 5) as.integer(args[5]) else 42L
+
+# Seed the RNG so the assignTaxonomy Wang/RDP bootstrap is reproducible across
+# runs. Best-effort under multithread (DADA2 forks workers); set.seed fixes the
+# sampling stream assignTaxonomy draws from.
+set.seed(seed_num)
 
 RANKS <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
 
