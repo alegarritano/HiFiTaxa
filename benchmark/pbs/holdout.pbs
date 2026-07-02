@@ -1,0 +1,126 @@
+#!/bin/bash
+# Leave-10%-out reference holdout, BLCA + NB, as a NON-interactive Gadi job.
+#   1. split the BLCA-parsed reference 90/10 (seeded, reproducible)
+#   2. rebuild the BLCA + NB databases from the 90% train reference
+#   3. classify the held-out 10% (the removed sequences, as ASV queries)
+#        BLCA : both markers, via the pipeline's taxonomy_only entry
+#        NB   : 16S -> two-step (genus assignTaxonomy + addSpecies) via taxonomy_only
+#               ITS -> single-step 7-rank assignTaxonomy, run directly (taxonomy_only
+#                      only wires the two-step path, which collapses on ITS)
+# Emu/EMITS are NOT included here: the holdout queries are reference SEQUENCES,
+# not reads, so the read-level profilers don't apply (see benchmark/README.md).
+# Score predictions against test_10.taxonomy afterwards.
+#
+# Submit:  qsub -v MARKER=16S,TEST_SUBSAMPLE=3000 benchmark/pbs/holdout.pbs
+#     or:  qsub -v MARKER=ITS benchmark/pbs/holdout.pbs
+#
+#PBS -P <proj>
+#PBS -q normal
+#PBS -l walltime=24:00:00
+#PBS -l ncpus=16
+#PBS -l mem=64GB
+#PBS -l jobfs=100GB
+#PBS -l storage=scratch/<proj>+gdata/<proj>
+#PBS -l wd
+#PBS -N hifitaxa_holdout
+#PBS -j oe
+set -euo pipefail
+
+# ============================ CONFIG (edit me) =============================
+PROJ="${PROJ:-<proj>}"
+REPO="${REPO:-/scratch/$PROJ/$USER/HiFiTaxa}"
+MARKER="${MARKER:-16S}"                 # 16S (GTDB) or ITS (UNITE)
+SEED="${SEED:-42}"
+HOLDOUT_FRAC="${HOLDOUT_FRAC:-0.10}"
+# TEST_SUBSAMPLE caps how many held-out queries are classified (0 = all). BLCA is
+# per-query expensive; the split is already random, so the first N of the shuffled
+# test set is itself a random subsample. A full GTDB 10% (~95k seqs) is very slow.
+TEST_SUBSAMPLE="${TEST_SUBSAMPLE:-0}"
+NCPU="${PBS_NCPUS:-${NCPUS:-16}}"
+# ===========================================================================
+
+if [ "$MARKER" = "16S" ]; then
+  REF_FASTA="$REPO/db/gtdb_ssu_BLCAparsed.fasta"
+  REF_TAX="$REPO/db/gtdb_ssu_BLCAparsed.taxonomy"
+  MINLEN=1000; SPLITTER=split_gtdb_holdout.py
+else
+  REF_FASTA="$REPO/db_unite/unite_BLCAparsed.fasta"
+  REF_TAX="$REPO/db_unite/unite_BLCAparsed.taxonomy"
+  MINLEN=0; SPLITTER=split_unite_holdout.py
+fi
+HOLDOUT="$REPO/benchmark_holdout_${MARKER,,}_seed${SEED}"
+
+# --- offline runtime setup (mirrors docs/gadi.md step 7) -------------------
+source /scratch/"$PROJ"/"$USER"/miniforge3/etc/profile.d/conda.sh
+module load singularity
+cd "$REPO"
+conda activate HiFiTaxa            # python3 + makeblastdb (BLAST+) + build scripts
+source set_apptainer_cache.sh
+export NXF_HOME="$PWD/.nextflow"
+export NXF_OFFLINE=true
+
+# --- 1. split reference -> reference_90 + test_10 (seeded) ------------------
+python3 "benchmark/$SPLITTER" \
+  --in-fasta "$REF_FASTA" --in-taxonomy "$REF_TAX" \
+  --out-dir "$HOLDOUT" --min-length "$MINLEN" \
+  --holdout-frac "$HOLDOUT_FRAC" --seed "$SEED"
+
+# --- 2. build BLCA index on the 90% train reference ------------------------
+makeblastdb -in "$HOLDOUT/reference_90.fasta" -dbtype nucl -parse_seqids \
+  -out "$HOLDOUT/reference_90.fasta"
+
+# --- optional subsample of the held-out queries actually classified --------
+QUERY="$HOLDOUT/test_10.fasta"
+if [ "$TEST_SUBSAMPLE" -gt 0 ]; then
+  QUERY="$HOLDOUT/test_query.fasta"
+  awk -v n="$TEST_SUBSAMPLE" '/^>/{c++} c>n{exit} {print}' "$HOLDOUT/test_10.fasta" > "$QUERY"
+  echo "[holdout] classifying first $TEST_SUBSAMPLE of the shuffled held-out set"
+fi
+
+if [ "$MARKER" = "16S" ]; then
+  # --- 3a. build the two-step NB references from the 90% train --------------
+  bash "$REPO/bin/build_gtdb_dada2_db.sh" \
+    "$HOLDOUT/reference_90.fasta" "$HOLDOUT/reference_90.taxonomy" \
+    "$HOLDOUT/gtdb_ssu_dada2_genus.fa.gz" "$HOLDOUT/gtdb_ssu_dada2_species.fa.gz"
+
+  # --- 3b. BLCA + two-step NB in one taxonomy_only run ----------------------
+  # --gtdb_db_dir bound under singularity so BLCA can read reference_90.* (param,
+  # not staged); NB genus/species dbs are staged path inputs -> autoMounts binds them.
+  nextflow run . -entry taxonomy_only -profile singularity \
+    --classifier blca,nb \
+    --asv_fasta "$QUERY" \
+    --gtdb_db_dir "$HOLDOUT" \
+    --blca_db  "$HOLDOUT/reference_90.fasta" \
+    --blca_tax "$HOLDOUT/reference_90.taxonomy" \
+    --gtdb_dada2_genus_db   "$HOLDOUT/gtdb_ssu_dada2_genus.fa.gz" \
+    --gtdb_dada2_species_db "$HOLDOUT/gtdb_ssu_dada2_species.fa.gz" \
+    --random_seed "$SEED" \
+    --publish_dir_mode copy --outdir "$HOLDOUT/results"
+  echo "[holdout] BLCA -> $HOLDOUT/results/taxonomy_blca/  NB -> $HOLDOUT/results/taxonomy_nb/"
+else
+  # --- 3a. build the single-step UNITE NB reference from the 90% train ------
+  bash "$REPO/bin/build_unite_dada2_db.sh" \
+    "$HOLDOUT/reference_90.fasta" "$HOLDOUT/reference_90.taxonomy" \
+    "$HOLDOUT/unite_singlestep_ref.fa.gz"
+
+  # --- 3b. BLCA via taxonomy_only -------------------------------------------
+  nextflow run . -entry taxonomy_only -profile singularity \
+    --classifier blca \
+    --asv_fasta "$QUERY" \
+    --gtdb_db_dir "$HOLDOUT" \
+    --blca_db  "$HOLDOUT/reference_90.fasta" \
+    --blca_tax "$HOLDOUT/reference_90.taxonomy" \
+    --publish_dir_mode copy --outdir "$HOLDOUT/results"
+
+  # --- 3c. single-step NB, run the R directly inside the QIIME2 image -------
+  QIIME2_SIF=$(ls "$NXF_SINGULARITY_CACHEDIR"/*qiime2*amplicon*.img 2>/dev/null | head -1)
+  [ -n "$QIIME2_SIF" ] || { echo "ERROR: QIIME2 .sif not found in $NXF_SINGULARITY_CACHEDIR" >&2; exit 1; }
+  mkdir -p "$HOLDOUT/results/taxonomy_nb" "$HOLDOUT/results/taxonomy_nb/.rhome"
+  ( cd "$HOLDOUT/results/taxonomy_nb"
+    singularity exec -B "$REPO" -B "$HOLDOUT" --env HOME="$HOLDOUT/results/taxonomy_nb/.rhome" \
+      "$QIIME2_SIF" Rscript "$REPO/scripts/dada2_assign_tax_singlestep.R" \
+        "$QUERY" "$NCPU" "$HOLDOUT/unite_singlestep_ref.fa.gz" 80 "$SEED" )
+  echo "[holdout] BLCA -> $HOLDOUT/results/taxonomy_blca/  NB(single-step) -> $HOLDOUT/results/taxonomy_nb/"
+fi
+
+echo "[holdout] ground truth -> $HOLDOUT/test_10.taxonomy   (orphans: $HOLDOUT/orphan_test_accessions.txt)"

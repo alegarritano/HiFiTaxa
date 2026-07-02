@@ -1,10 +1,18 @@
 # HiFiTaxa Gadi test harness
 
-Scripts to (a) run the pipeline on real reads as non-interactive PBS jobs, and
-(b) run the leave-10%-out reference holdout benchmark. Assumes the databases,
+Three benchmarks, run as non-interactive Gadi PBS jobs. Assumes the databases,
 container images and conda envs are already staged on Gadi as in
 [../docs/gadi.md](../docs/gadi.md) (steps 1–5b), and that the reads (ATCC 16S,
 103-species fungal ITS) live under `/scratch/<proj>/$USER/...`.
+
+| # | Benchmark | Query | Reference | Classifiers | Score at |
+|---|---|---|---|---|---|
+| 1 | Mock vs full DB | mock reads | full DB | BLCA, NB, Emu/EMITS | species (recovery) |
+| 2 | Mock vs clade-excluded DB | mock reads | DB with mock species removed | BLCA, NB, Emu/EMITS | genus (fallback) |
+| 3 | Leave-10%-out holdout | removed 10% of reference (as ASVs) | 90% train | BLCA, NB only | species/genus |
+
+Experiment 3 is BLCA+NB only: its queries are reference *sequences*, not reads, so
+the read-level profilers (Emu/EMITS) don't apply. Experiments 1–2 cover all four.
 
 Every script has a `CONFIG (edit me)` block at the top. Set `PROJ` to your NCI
 project code and the read/repo paths; each var is also overridable at submit time
@@ -37,55 +45,66 @@ pipeline's ITS defaults. If your Gadi fungal reads are the ~1.8 kb ITS–28S
 amplicon they will instead show **ITS1catta / LR5_TW14ngs** (see
 [../docs/PRIMERS.md](../docs/PRIMERS.md)); set those in `run_fungi_its.pbs`.
 
-## 2. Run the pipeline on real reads (non-interactive)
+## Experiment 1 — mock vs full DB (`run_*.pbs`)
 
 ```bash
-qsub benchmark/pbs/run_atcc_16s.pbs      # ATCC 16S mock  -> results_atcc_16s/
-qsub benchmark/pbs/run_fungi_its.pbs     # fungal ITS     -> results_fungi_its/
+qsub -v READS_DIR=/scratch/<proj>/$USER/ATCC_bacteria benchmark/pbs/run_atcc_16s.pbs
+qsub -v READS_DIR=/scratch/<proj>/$USER/fungi_103      benchmark/pbs/run_fungi_its.pbs
 ```
 
-Each script builds `samples.tsv` + `metadata.tsv` from its `READS_DIR`, then runs
-`bin/run_pipeline.py --classifier all` offline (`--skip-gtdb-check`,
-`-profile singularity`, `--publish_dir_mode copy`).
+Each builds `samples.tsv` + `metadata.tsv` from its `READS_DIR`, then runs
+`bin/run_pipeline.py --classifier all` offline against the full database.
 
-## 3. Leave-10%-out holdout benchmark
+## Experiment 2 — mock vs clade-excluded DB (`clade_exclusion.pbs`)
 
-One splitter per holdout (both Python, both standalone). They are the exact
-scripts that produced the published GTDB/UNITE splits:
+Removes the mock's known species from the reference, **rebuilds every classifier
+DB from the depleted source**, then classifies the mock reads. All classifiers see
+the same depleted DB (so they're comparable); score at **genus** since species was
+removed on purpose. Needs a species list / truth table per mock.
 
 ```bash
-# 16S / GTDB (default --min-length 1000):
-python benchmark/split_gtdb_holdout.py \
-  --in-fasta   db/gtdb_ssu_BLCAparsed.fasta \
-  --in-taxonomy db/gtdb_ssu_BLCAparsed.taxonomy \
-  --out-dir holdout_16s --seed 42
-
-# ITS / UNITE (default --min-length 0; ITS is short):
-python benchmark/split_unite_holdout.py \
-  --in-fasta   db_unite/unite_BLCAparsed.fasta \
-  --in-taxonomy db_unite/unite_BLCAparsed.taxonomy \
-  --out-dir holdout_its --seed 42
-
-# or split + makeblastdb + classify held-out queries in one PBS job:
-qsub -v MARKER=16S benchmark/pbs/holdout_blca.pbs    # uses split_gtdb_holdout.py
-qsub -v MARKER=ITS benchmark/pbs/holdout_blca.pbs    # uses split_unite_holdout.py
+qsub -v MARKER=16S,EXCLUDE_LIST=/path/atcc_truth.tsv,SPECIES_COL=species,READS_DIR=/scratch/<proj>/$USER/ATCC_bacteria benchmark/pbs/clade_exclusion.pbs
+qsub -v MARKER=ITS,EXCLUDE_LIST=/path/fungi_truth.tsv,SPECIES_COL=species,READS_DIR=/scratch/<proj>/$USER/fungi_103    benchmark/pbs/clade_exclusion.pbs
 ```
 
-Each writes into `--out-dir`:
+`EXCLUDE_LIST` is either a plain text file (one species per line) or a TSV truth
+table (add `SPECIES_COL=<column>`). `deplete_reference.py` handles both the
+BLCA-parsed references (BLCA/NB/Emu) and the lineage-in-header EMITS target.
+
+## Experiment 3 — leave-10%-out holdout, BLCA + NB (`holdout.pbs`)
+
+The two splitters are the exact scripts that produced the published GTDB/UNITE
+splits. Standalone:
+
+```bash
+python benchmark/split_gtdb_holdout.py  --in-fasta db/gtdb_ssu_BLCAparsed.fasta \
+  --in-taxonomy db/gtdb_ssu_BLCAparsed.taxonomy --out-dir holdout_16s --seed 42
+python benchmark/split_unite_holdout.py --in-fasta db_unite/unite_BLCAparsed.fasta \
+  --in-taxonomy db_unite/unite_BLCAparsed.taxonomy --out-dir holdout_its --seed 42
+```
+
+Or split + rebuild BLCA/NB DBs from the 90% + classify the held-out 10% in one job:
+
+```bash
+qsub -v MARKER=16S,TEST_SUBSAMPLE=3000 benchmark/pbs/holdout.pbs   # NB = two-step (GTDB)
+qsub -v MARKER=ITS                     benchmark/pbs/holdout.pbs   # NB = single-step (UNITE)
+```
+
+NB handling matches the pipeline design: **two-step** (genus + addSpecies) for
+16S/GTDB via `taxonomy_only`; **single-step** 7-rank `assignTaxonomy` for ITS/UNITE
+(run directly, since `taxonomy_only`'s NB path is two-step only). Each split writes:
 
 | file | contents |
 |---|---|
-| `reference_90.fasta` / `.taxonomy` | 90% training reference — rebuild the classifier DB from this |
+| `reference_90.fasta` / `.taxonomy` | 90% training reference — the DBs are rebuilt from this |
 | `test_10.fasta` / `.taxonomy` | 10% held-out queries + ground-truth lineages |
 | `orphan_test_accessions.txt` | test species absent from train (species-level accuracy ceiling) |
 | `split_stats.json` | counts + species-coverage diagnostics |
 
-The split is a pure seeded random split (not stratified by species), so the
-orphan rate is measured, not engineered away. `holdout_blca.pbs` then
-`makeblastdb`s `reference_90` and classifies `test_10` with BLCA via the
-pipeline's `taxonomy_only` entry. `TEST_SUBSAMPLE=N` caps the number of queries
-(BLCA is per-query expensive; a full GTDB 10% is ~95k seqs). Score the
-predictions in `blca_results/taxonomy_blca/` against `test_10.taxonomy`.
+`TEST_SUBSAMPLE=N` caps how many held-out queries are classified (BLCA is per-query
+expensive; a full GTDB 10% is ~95k seqs). Predictions land in
+`benchmark_holdout_<marker>_seed42/results/taxonomy_{blca,nb}/`; score against
+`test_10.taxonomy`.
 
 > **Cross-group reproducibility.** `random.Random(seed).shuffle` is stable across
 > Python 3 versions and machines, so the split is fully determined by two things:

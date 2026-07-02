@@ -1,0 +1,100 @@
+#!/bin/bash
+# Clade-exclusion benchmark as a NON-interactive Gadi job: remove the mock's known
+# species from the reference, rebuild EVERY classifier DB from the depleted source,
+# then classify the real mock READS against it. Tests graceful genus-level fallback
+# when the true species is absent. All classifiers see the SAME depleted DB, so
+# they are directly comparable.
+#   16S (GTDB) : BLCA + NB(two-step) + Emu
+#   ITS (UNITE): BLCA + NB(single-step) + EMITS
+# Score at GENUS afterwards (species was removed on purpose).
+#
+# Submit:  qsub -v MARKER=16S,EXCLUDE_LIST=/path/atcc_truth.tsv,SPECIES_COL=species,READS_DIR=/scratch/du5/ag4015/ATCC_bacteria benchmark/pbs/clade_exclusion.pbs
+#     or:  qsub -v MARKER=ITS,EXCLUDE_LIST=/path/fungi_truth.tsv,SPECIES_COL=species,READS_DIR=/scratch/du5/ag4015/fungi_103 benchmark/pbs/clade_exclusion.pbs
+#
+#PBS -P <proj>
+#PBS -q normal
+#PBS -l walltime=24:00:00
+#PBS -l ncpus=16
+#PBS -l mem=64GB
+#PBS -l jobfs=100GB
+#PBS -l storage=scratch/<proj>+gdata/<proj>
+#PBS -l wd
+#PBS -N hifitaxa_cladeexcl
+#PBS -j oe
+set -euo pipefail
+
+# ============================ CONFIG (edit me) =============================
+PROJ="${PROJ:-<proj>}"
+REPO="${REPO:-/scratch/$PROJ/$USER/HiFiTaxa}"
+MARKER="${MARKER:-16S}"                       # 16S (GTDB) or ITS (UNITE)
+EXCLUDE_LIST="${EXCLUDE_LIST:?set EXCLUDE_LIST=/path/to/mock_species_list_or_truth.tsv}"
+SPECIES_COL="${SPECIES_COL:-}"                # column name if EXCLUDE_LIST is a TSV truth table; empty = one species per line
+READS_DIR="${READS_DIR:?set READS_DIR=/path/to/mock/reads}"
+SEED="${SEED:-42}"
+OUTDIR="${OUTDIR:-$REPO/results_cladeexcl_${MARKER,,}}"
+# ===========================================================================
+
+DEP="$REPO/benchmark_cladeexcl_${MARKER,,}_db"       # depleted DB build dir
+[ -n "$SPECIES_COL" ] && COLARG=(--species-col "$SPECIES_COL") || COLARG=()
+
+# --- offline runtime setup (mirrors docs/gadi.md step 7) -------------------
+source /scratch/"$PROJ"/"$USER"/miniforge3/etc/profile.d/conda.sh
+module load singularity
+cd "$REPO"
+conda activate HiFiTaxa
+source set_apptainer_cache.sh
+export NXF_HOME="$PWD/.nextflow"
+export NXF_OFFLINE=true
+
+# --- build samples.tsv + metadata.tsv from the reads directory -------------
+mkdir -p "$OUTDIR"
+SAMPLES="$OUTDIR/samples.tsv"; METADATA="$OUTDIR/metadata.tsv"
+{
+  printf 'sample-id\tabsolute-filepath\n'
+  for f in "$READS_DIR"/*.fastq.gz; do printf '%s\t%s\n' "$(basename "$f" .fastq.gz)" "$f"; done
+} > "$SAMPLES"
+[ "$(wc -l < "$SAMPLES")" -gt 1 ] || { echo "ERROR: no *.fastq.gz in $READS_DIR (gzip .fastq first)" >&2; exit 1; }
+{ printf 'sample_name\tcondition\n'
+  tail -n +2 "$SAMPLES" | cut -f1 | while read -r s; do printf '%s\tmock\n' "$s"; done
+} > "$METADATA"
+
+mkdir -p "$DEP"
+if [ "$MARKER" = "16S" ]; then
+  # --- deplete the BLCA-parsed GTDB reference ------------------------------
+  python3 benchmark/deplete_reference.py \
+    --in-fasta db/gtdb_ssu_BLCAparsed.fasta --in-taxonomy db/gtdb_ssu_BLCAparsed.taxonomy \
+    --exclude-species "$EXCLUDE_LIST" "${COLARG[@]}" \
+    --out-fasta "$DEP/gtdb_ssu_BLCAparsed.fasta" --out-taxonomy "$DEP/gtdb_ssu_BLCAparsed.taxonomy"
+  # --- rebuild BLCA + NB(two-step) + Emu from the depleted source ----------
+  makeblastdb -in "$DEP/gtdb_ssu_BLCAparsed.fasta" -dbtype nucl -parse_seqids -out "$DEP/gtdb_ssu_BLCAparsed.fasta"
+  bash bin/build_gtdb_dada2_db.sh "$DEP/gtdb_ssu_BLCAparsed.fasta" "$DEP/gtdb_ssu_BLCAparsed.taxonomy" \
+    "$DEP/gtdb_ssu_dada2_genus.fa.gz" "$DEP/gtdb_ssu_dada2_species.fa.gz"
+  bash bin/build_gtdb_emu_db.sh "$DEP/gtdb_ssu_BLCAparsed.fasta" "$DEP/gtdb_ssu_BLCAparsed.taxonomy" "$DEP/emu"
+  # --- classify the mock reads against the depleted DB ---------------------
+  nextflow run . -profile singularity \
+    --input "$SAMPLES" --metadata "$METADATA" --classifier all \
+    --gtdb_db_dir "$DEP" --nb_db_dir "$DEP" --emu_db_dir "$DEP/emu" \
+    --random_seed "$SEED" --publish_dir_mode copy --outdir "$OUTDIR"
+else
+  # --- deplete the BLCA-parsed UNITE reference (BLCA + NB) ------------------
+  python3 benchmark/deplete_reference.py \
+    --in-fasta db_unite/unite_BLCAparsed.fasta --in-taxonomy db_unite/unite_BLCAparsed.taxonomy \
+    --exclude-species "$EXCLUDE_LIST" "${COLARG[@]}" \
+    --out-fasta "$DEP/unite_BLCAparsed.fasta" --out-taxonomy "$DEP/unite_BLCAparsed.taxonomy"
+  makeblastdb -in "$DEP/unite_BLCAparsed.fasta" -dbtype nucl -parse_seqids -out "$DEP/unite_BLCAparsed.fasta"
+  bash bin/build_unite_dada2_db.sh "$DEP/unite_BLCAparsed.fasta" "$DEP/unite_BLCAparsed.taxonomy" \
+    "$DEP/unite_full_singlestep_ref.fa.gz"
+  # --- deplete the EMITS minimap2 target (raw UNITE fasta, lineage in header)
+  python3 benchmark/deplete_reference.py \
+    --in-fasta db_unite/unite.fasta \
+    --exclude-species "$EXCLUDE_LIST" "${COLARG[@]}" \
+    --out-fasta "$DEP/unite.fasta"
+  # --- classify the mock reads against the depleted DB (marker-aware) ------
+  nextflow run . -profile singularity --marker ITS \
+    --input "$SAMPLES" --metadata "$METADATA" --classifier all \
+    --unite_db_dir "$DEP" \
+    --random_seed "$SEED" --publish_dir_mode copy --outdir "$OUTDIR"
+fi
+
+echo "[clade-excl] predictions -> $OUTDIR   (depleted DB: $DEP)"
+echo "[clade-excl] score at GENUS level against the mock's known composition."
