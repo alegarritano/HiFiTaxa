@@ -38,12 +38,22 @@ Usage:
   python deplete_reference.py ... --exclude-species truth.tsv --species-col species
 """
 import argparse
+import re
 import sys
 from pathlib import Path
 
+_GTDB_SUFFIX = re.compile(r"_[A-Z]+$")   # polyphyly genus (Bacillus_A) / epithet split (coli_F)
 
-def norm(s):
-    return s.strip().lower()
+
+def norm(s, gtdb_fold=True):
+    # fold GTDB's _<UPPER> suffixes (on the original case, before lowercasing) so
+    # 'Escherichia coli' matches 'Escherichia coli_F' and 'Cereibacter sphaeroides'
+    # matches 'Cereibacter_A sphaeroides'. Placeholder names (G047199095,
+    # sp047199095) have no such suffix and are left intact.
+    s = s.strip()
+    if gtdb_fold and s:
+        s = " ".join(_GTDB_SUFFIX.sub("", tok) for tok in s.split())
+    return s.lower()
 
 
 def read_fasta_records(path):
@@ -75,7 +85,7 @@ def species_from_header(header):
     return parts[-1].strip() if parts else ""
 
 
-def load_exclude(path, species_col):
+def load_exclude(path, species_col, gtdb_fold):
     names = set()
     with open(path) as fh:
         if species_col is not None:
@@ -87,12 +97,12 @@ def load_exclude(path, species_col):
             for line in fh:
                 cols = line.rstrip("\n").split("\t")
                 if len(cols) > ci and cols[ci].strip():
-                    names.add(norm(cols[ci]))
+                    names.add(norm(cols[ci], gtdb_fold))
         else:
             for line in fh:
                 s = line.strip()
                 if s and not s.startswith("#"):
-                    names.add(norm(s))
+                    names.add(norm(s, gtdb_fold))
     if not names:
         sys.exit(f"no species names read from {path}")
     return names
@@ -108,10 +118,13 @@ def main():
     ap.add_argument("--species-col", help="if --exclude-species is a TSV, the species column name")
     ap.add_argument("--out-fasta", required=True)
     ap.add_argument("--out-taxonomy", help="write depleted taxonomy (BLCA-parsed mode only)")
+    ap.add_argument("--no-gtdb-fold", action="store_true",
+                    help="disable folding of GTDB _<UPPER> suffixes (keep them distinct)")
     args = ap.parse_args()
+    gtdb_fold = not args.no_gtdb_fold
 
-    exclude = load_exclude(args.exclude_species, args.species_col)
-    print(f"[deplete] excluding {len(exclude)} species")
+    exclude = load_exclude(args.exclude_species, args.species_col, gtdb_fold)
+    print(f"[deplete] excluding {len(exclude)} species (GTDB suffix folding: {'on' if gtdb_fold else 'off'})")
 
     tax = {}
     if args.in_taxonomy:
@@ -134,7 +147,7 @@ def main():
                 sp = species_from_taxonomy_field(tax.get(acc, ""))
             else:
                 sp = species_from_header(header)
-            if norm(sp) in exclude:
+            if norm(sp, gtdb_fold) in exclude:
                 n_dropped += 1
                 matched.add(norm(sp))
                 continue

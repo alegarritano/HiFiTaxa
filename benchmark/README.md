@@ -62,14 +62,22 @@ DB from the depleted source**, then classifies the mock reads. All classifiers s
 the same depleted DB (so they're comparable); score at **genus** since species was
 removed on purpose. Needs a species list / truth table per mock.
 
+Curated exclusion lists are committed under `benchmark/mock_exclude/` (derived
+from the ATCC MSA-1003 composition and Table S1, with the manuscript's synonym
+folding baked in — old+new names, and the Cortinarius segregates that UNITE uses):
+
 ```bash
-qsub -v MARKER=16S,EXCLUDE_LIST=/path/atcc_truth.tsv,SPECIES_COL=species,READS_DIR=/scratch/<proj>/$USER/ATCC_bacteria benchmark/pbs/clade_exclusion.pbs
-qsub -v MARKER=ITS,EXCLUDE_LIST=/path/fungi_truth.tsv,SPECIES_COL=species,READS_DIR=/scratch/<proj>/$USER/fungi_103    benchmark/pbs/clade_exclusion.pbs
+qsub -v MARKER=16S,EXCLUDE_LIST=benchmark/mock_exclude/atcc_msa1003_species.txt,READS_DIR=/scratch/<proj>/$USER/ATCC_bacteria benchmark/pbs/clade_exclusion.pbs
+qsub -v MARKER=ITS,EXCLUDE_LIST=benchmark/mock_exclude/fungi_103_species.txt,READS_DIR=/scratch/<proj>/$USER/fungi_103    benchmark/pbs/clade_exclusion.pbs
 ```
 
-`EXCLUDE_LIST` is either a plain text file (one species per line) or a TSV truth
-table (add `SPECIES_COL=<column>`). `deplete_reference.py` handles both the
-BLCA-parsed references (BLCA/NB/Emu) and the lineage-in-header EMITS target.
+`deplete_reference.py` handles both the BLCA-parsed references (BLCA/NB/Emu) and
+the lineage-in-header EMITS target, and folds GTDB `_<UPPER>` suffixes so
+`Escherichia coli` also matches `Escherichia coli_F`, `Cereibacter sphaeroides`
+matches `Cereibacter_A sphaeroides`, etc. `EXCLUDE_LIST` can instead be your own
+plain list (one species/line) or a TSV truth table (add `SPECIES_COL=<column>`).
+Check the `N/M excluded species matched` line in the job log — unmatched names
+mean a nomenclature mismatch to reconcile.
 
 ## Experiment 3 — leave-10%-out holdout, BLCA + NB (`holdout.pbs`)
 

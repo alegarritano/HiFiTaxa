@@ -1,0 +1,32 @@
+# ATCC MSA-1003 twenty-strain staggered 16S mock — species to exclude for the
+# clade-exclusion benchmark. Where GTDB/nomenclature differs from the ATCC label
+# BOTH names are listed (the paper's synonym folding). deplete_reference.py also
+# folds GTDB _<UPPER> suffixes automatically, so 'Escherichia coli' also matches
+# 'Escherichia coli_F' and 'Cereibacter sphaeroides' matches 'Cereibacter_A sphaeroides'.
+Acinetobacter baumannii
+Bacillus pacificus
+Bacillus cereus
+Phocaeicola vulgatus
+Bacteroides vulgatus
+Bifidobacterium adolescentis
+Clostridium beijerinckii
+Cutibacterium acnes
+Propionibacterium acnes
+Deinococcus radiodurans
+Enterococcus faecalis
+Escherichia coli
+G047199095 sp047199095
+Helicobacter pylori
+Lactobacillus gasseri
+Neisseria meningitidis
+Porphyromonas gingivalis
+Pseudomonas paraeruginosa
+Pseudomonas aeruginosa
+Cereibacter sphaeroides
+Rhodobacter sphaeroides
+Schaalia odontolytica
+Pauljensenia odontolytica
+Staphylococcus aureus
+Staphylococcus epidermidis
+Streptococcus agalactiae
+Streptococcus mutans
