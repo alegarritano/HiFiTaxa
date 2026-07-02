@@ -83,6 +83,7 @@ python bin/run_pipeline.py --marker ITS \
   --input "$SAMPLES" --metadata "$METADATA" \
   --classifier "$CLASSIFIER" \
   --skip-gtdb-check --skip-test \
+  --min_asv_totalfreq 1 \
   --profile singularity --publish_dir_mode copy \
   --outdir "$OUTDIR" \
   "${PRIMER_ARGS[@]}"

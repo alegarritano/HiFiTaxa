@@ -94,6 +94,7 @@ if [ "$MARKER" = "16S" ]; then
     --gtdb_dada2_genus_db   "$DEP/gtdb_ssu_dada2_genus.fa.gz" \
     --gtdb_dada2_species_db "$DEP/gtdb_ssu_dada2_species.fa.gz" \
     --emu_db_dir "$DEP/emu" \
+    --min_asv_totalfreq 1 \
     --random_seed "$SEED" --publish_dir_mode copy --outdir "$OUTDIR"
 else
   # --- deplete the BLCA-parsed UNITE reference (BLCA + NB) ------------------
@@ -124,6 +125,7 @@ else
     --blca_tax "$DEP/unite_BLCAparsed.taxonomy" \
     --emits_db "$DEP/unite.fasta" \
     --unite_dada2_singlestep_db "$DEP/unite_full_singlestep_ref.fa.gz" \
+    --min_asv_totalfreq 1 \
     --random_seed "$SEED" --publish_dir_mode copy --outdir "$OUTDIR"
 fi
 

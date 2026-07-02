@@ -92,20 +92,16 @@ def main():
     test_txt  = out_dir / "test_10.taxonomy"
     train_txt = out_dir / "reference_90.taxonomy"
 
-    print("[split] pass 2: write test_10.fasta + reference_90.fasta")
-    n_test_written = n_train_written = 0
-    n_test_tax_written = n_train_tax_written = 0
-    with open(test_fa, "w") as tf, open(train_fa, "w") as rf, \
-         open(test_txt, "w") as ttx, open(train_txt, "w") as rtx:
+    # PASS 2: stream-write TRAIN; buffer TEST, then write TEST in SHUFFLED order so
+    # a downstream `head -N` of test_10.fasta is a random subsample, not a
+    # taxonomy-ordered block (see split_gtdb_holdout.py for the rationale).
+    print("[split] pass 2: write reference_90 (streamed) + test_10 (shuffled order)")
+    n_train_written = n_train_tax_written = 0
+    test_seqs = {}
+    with open(train_fa, "w") as rf, open(train_txt, "w") as rtx:
         for acc, seq_lines in read_fasta_records(args.in_fasta):
             if acc in test_set:
-                tf.write(f">{acc}\n")
-                for s in seq_lines:
-                    tf.write(s + "\n")
-                n_test_written += 1
-                if acc in tax:
-                    ttx.write(f"{acc}\t{tax[acc]}\n")
-                    n_test_tax_written += 1
+                test_seqs[acc] = seq_lines
             elif acc in train_set:
                 rf.write(f">{acc}\n")
                 for s in seq_lines:
@@ -114,6 +110,19 @@ def main():
                 if acc in tax:
                     rtx.write(f"{acc}\t{tax[acc]}\n")
                     n_train_tax_written += 1
+    n_test_written = n_test_tax_written = 0
+    with open(test_fa, "w") as tf, open(test_txt, "w") as ttx:
+        for acc in kept_ids[:n_test]:              # shuffled order -> head-N is random
+            seq_lines = test_seqs.get(acc)
+            if seq_lines is None:
+                continue
+            tf.write(f">{acc}\n")
+            for s in seq_lines:
+                tf.write(s + "\n")
+            n_test_written += 1
+            if acc in tax:
+                ttx.write(f"{acc}\t{tax[acc]}\n")
+                n_test_tax_written += 1
 
     train_species = {species_of(tax.get(a, "")) for a in train_set} - {""}
     test_species  = {species_of(tax.get(a, "")) for a in test_set}  - {""}
