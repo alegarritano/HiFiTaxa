@@ -1,0 +1,91 @@
+#!/bin/bash
+# Leave-10%-out BLCA holdout benchmark as a NON-interactive Gadi job.
+#   1. split the BLCA-parsed reference into 90% train / 10% held-out queries
+#   2. makeblastdb on the 90% train reference
+#   3. classify the held-out 10% with BLCA via the pipeline's taxonomy_only entry
+# Score afterwards against test_10.taxonomy (ground truth) with your scorer.
+#
+# Submit:  qsub -v MARKER=ITS benchmark/pbs/holdout_blca.pbs
+#     or:  qsub -v MARKER=16S benchmark/pbs/holdout_blca.pbs
+#
+#PBS -P <proj>
+#PBS -q normal
+#PBS -l walltime=24:00:00
+#PBS -l ncpus=16
+#PBS -l mem=64GB
+#PBS -l jobfs=100GB
+#PBS -l storage=scratch/<proj>+gdata/<proj>
+#PBS -l wd
+#PBS -N hifitaxa_holdout
+#PBS -j oe
+set -euo pipefail
+
+# ============================ CONFIG (edit me) =============================
+PROJ="${PROJ:-<proj>}"
+REPO="${REPO:-/scratch/$PROJ/$USER/HiFiTaxa}"
+MARKER="${MARKER:-ITS}"                 # ITS (UNITE) or 16S (GTDB)
+SEED="${SEED:-42}"
+HOLDOUT_FRAC="${HOLDOUT_FRAC:-0.10}"
+# TEST_SUBSAMPLE caps how many held-out queries are classified (0 = all). BLCA is
+# per-query expensive; the split is already random, so the first N of the shuffled
+# test set is itself a random subsample. A full GTDB 10% (~95k seqs) is very slow.
+TEST_SUBSAMPLE="${TEST_SUBSAMPLE:-0}"
+# ===========================================================================
+
+# marker -> reference files + length threshold + splitter (docs/gadi.md steps 5 / 5b)
+if [ "$MARKER" = "16S" ]; then
+  REF_FASTA="$REPO/db/gtdb_ssu_BLCAparsed.fasta"
+  REF_TAX="$REPO/db/gtdb_ssu_BLCAparsed.taxonomy"
+  MINLEN=1000
+  SPLITTER=split_gtdb_holdout.py
+else
+  REF_FASTA="$REPO/db_unite/unite_BLCAparsed.fasta"
+  REF_TAX="$REPO/db_unite/unite_BLCAparsed.taxonomy"
+  MINLEN=0
+  SPLITTER=split_unite_holdout.py
+fi
+HOLDOUT="$REPO/benchmark_holdout_${MARKER,,}_seed${SEED}"
+
+# --- offline runtime setup (mirrors docs/gadi.md step 7) -------------------
+source /scratch/"$PROJ"/"$USER"/miniforge3/etc/profile.d/conda.sh
+module load singularity
+cd "$REPO"
+conda activate HiFiTaxa            # provides python3 + makeblastdb (BLAST+)
+source set_apptainer_cache.sh
+export NXF_HOME="$PWD/.nextflow"
+export NXF_OFFLINE=true
+
+# --- 1. split reference -> reference_90 + test_10 --------------------------
+# Deterministic across machines/groups: same reference file + same --seed ->
+# byte-identical split (Python random.Random shuffle is stable across Python 3).
+python3 "benchmark/$SPLITTER" \
+  --in-fasta "$REF_FASTA" --in-taxonomy "$REF_TAX" \
+  --out-dir "$HOLDOUT" --min-length "$MINLEN" \
+  --holdout-frac "$HOLDOUT_FRAC" --seed "$SEED"
+
+# --- 2. build the BLAST index on the 90% train reference (index prefix = fasta)
+makeblastdb -in "$HOLDOUT/reference_90.fasta" -dbtype nucl -parse_seqids \
+  -out "$HOLDOUT/reference_90.fasta"
+
+# --- optional: subsample the held-out queries actually classified ----------
+QUERY="$HOLDOUT/test_10.fasta"
+if [ "$TEST_SUBSAMPLE" -gt 0 ]; then
+  QUERY="$HOLDOUT/test_query.fasta"
+  awk -v n="$TEST_SUBSAMPLE" '/^>/{c++} c>n{exit} {print}' "$HOLDOUT/test_10.fasta" > "$QUERY"
+  echo "[holdout] classifying first $TEST_SUBSAMPLE of the shuffled held-out set"
+fi
+
+# --- 3. classify the held-out queries with BLCA against the 90% reference --
+# Under -profile singularity only params.gtdb_db_dir is bind-mounted, so point it
+# at $HOLDOUT (autoMounts won't bind a path referenced only via a param, not staged).
+nextflow run . -entry taxonomy_only -profile singularity \
+  --classifier blca \
+  --asv_fasta "$QUERY" \
+  --gtdb_db_dir "$HOLDOUT" \
+  --blca_db  "$HOLDOUT/reference_90.fasta" \
+  --blca_tax "$HOLDOUT/reference_90.taxonomy" \
+  --publish_dir_mode copy \
+  --outdir "$HOLDOUT/blca_results"
+
+echo "[holdout] predictions -> $HOLDOUT/blca_results/taxonomy_blca/"
+echo "[holdout] ground truth -> $HOLDOUT/test_10.taxonomy   (orphans: $HOLDOUT/orphan_test_accessions.txt)"

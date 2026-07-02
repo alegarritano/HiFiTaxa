@@ -1,0 +1,77 @@
+#!/bin/bash
+# Run HiFiTaxa on the fungal ITS PacBio HiFi reads as a NON-interactive Gadi job.
+# Submit with:  qsub benchmark/pbs/run_fungi_its.pbs
+# (edit the CONFIG block below first, or override any var: `qsub -v READS_DIR=...`)
+#
+# Data provenance — 103-species fungal mock, PacBio Revio HiFi, full-ITS
+# (ITS9mun / ITS4ngsUni), ENA PRJEB108994:
+#   Tedersoo L et al. (2026) Benchmarking full-length ITS metabarcoding across
+#   Illumina 2x500, PacBio and Nanopore using mock and soil communities. bioRxiv.
+#   Code: github.com/Mycology-Microbiology-Center/fullITS-multiplatform-eval
+# NOTE: this mock's forward primer is ITS9mun (not the pipeline's 1391F default);
+# run benchmark/scan_primers.py on a read file to confirm and set the primers below.
+#
+#PBS -P <proj>
+#PBS -q normal
+#PBS -l walltime=08:00:00
+#PBS -l ncpus=16
+#PBS -l mem=64GB
+#PBS -l jobfs=100GB
+#PBS -l storage=scratch/<proj>+gdata/<proj>
+#PBS -l wd
+#PBS -N hifitaxa_its
+#PBS -j oe
+set -euo pipefail
+
+# ============================ CONFIG (edit me) =============================
+PROJ="${PROJ:-<proj>}"                                   # NCI project code
+REPO="${REPO:-/scratch/$PROJ/$USER/HiFiTaxa}"            # cloned + prepared repo
+READS_DIR="${READS_DIR:-/scratch/$PROJ/$USER/reads_fungi_its}"  # the 103-sp fungi HiFi .fastq.gz
+OUTDIR="${OUTDIR:-$REPO/results_fungi_its}"
+CLASSIFIER="${CLASSIFIER:-all}"                          # ITS 'all' = blca,emits,nb
+# Primers: leave unset to use the pipeline's ITS defaults (1391F / ITS4ngsUni).
+# Run `python benchmark/scan_primers.py <one_reads_file>` FIRST and set these if
+# your reads use a different pair (e.g. the ITS1catta/LR5_TW14ngs ~1.8 kb amplicon).
+FORWARD_PRIMER="${FORWARD_PRIMER:-}"
+REVERSE_PRIMER="${REVERSE_PRIMER:-}"
+# ===========================================================================
+
+# --- offline runtime setup (mirrors docs/gadi.md step 7) -------------------
+source /scratch/"$PROJ"/"$USER"/miniforge3/etc/profile.d/conda.sh
+module load singularity
+cd "$REPO"
+conda activate HiFiTaxa
+source set_apptainer_cache.sh
+export NXF_HOME="$PWD/.nextflow"
+export NXF_OFFLINE=true
+
+# --- build samples.tsv + metadata.tsv from the reads directory -------------
+SAMPLES="$OUTDIR/samples.tsv"
+METADATA="$OUTDIR/metadata.tsv"
+mkdir -p "$OUTDIR"
+{
+  printf 'sample-id\tabsolute-filepath\n'
+  for f in "$READS_DIR"/*.fastq.gz; do
+    printf '%s\t%s\n' "$(basename "$f" .fastq.gz)" "$f"
+  done
+} > "$SAMPLES"
+{
+  printf 'sample_name\tcondition\n'
+  tail -n +2 "$SAMPLES" | cut -f1 | while read -r s; do printf '%s\tfungi\n' "$s"; done
+} > "$METADATA"
+echo "[run] $(($(wc -l < "$SAMPLES") - 1)) samples from $READS_DIR"
+
+# --- run the pipeline (ITS marker; UNITE references from docs/gadi.md 5b) ---
+PRIMER_ARGS=()
+[ -n "$FORWARD_PRIMER" ] && PRIMER_ARGS+=(--forward_primer "$FORWARD_PRIMER")
+[ -n "$REVERSE_PRIMER" ] && PRIMER_ARGS+=(--reverse_primer "$REVERSE_PRIMER")
+
+python bin/run_pipeline.py --marker ITS \
+  --input "$SAMPLES" --metadata "$METADATA" \
+  --classifier "$CLASSIFIER" \
+  --skip-gtdb-check \
+  --profile singularity --publish_dir_mode copy \
+  --outdir "$OUTDIR" \
+  "${PRIMER_ARGS[@]}"
+
+echo "[run] done -> $OUTDIR"

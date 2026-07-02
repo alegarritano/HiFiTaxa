@@ -1,0 +1,62 @@
+#!/bin/bash
+# Run HiFiTaxa on the ATCC 16S PacBio HiFi mock reads as a NON-interactive Gadi
+# job.  Submit with:  qsub benchmark/pbs/run_atcc_16s.pbs
+# (edit the CONFIG block below first, or override any var: `qsub -v READS_DIR=...`)
+#
+# Data provenance — ATCC MSA 16S mock (192-plex PacBio HiFi), downloaded from:
+#   http://downloads.pacbcloud.com/public/dataset/atcc_msa/16S_192plex_HiFi.fastq.tar.gz
+#
+#PBS -P <proj>
+#PBS -q normal
+#PBS -l walltime=06:00:00
+#PBS -l ncpus=16
+#PBS -l mem=64GB
+#PBS -l jobfs=100GB
+#PBS -l storage=scratch/<proj>+gdata/<proj>
+#PBS -l wd
+#PBS -N hifitaxa_16s
+#PBS -j oe
+set -euo pipefail
+
+# ============================ CONFIG (edit me) =============================
+PROJ="${PROJ:-<proj>}"                                   # NCI project code
+REPO="${REPO:-/scratch/$PROJ/$USER/HiFiTaxa}"            # cloned + prepared repo
+READS_DIR="${READS_DIR:-/scratch/$PROJ/$USER/reads_atcc_16s}"  # ATCC HiFi .fastq.gz
+OUTDIR="${OUTDIR:-$REPO/results_atcc_16s}"
+CLASSIFIER="${CLASSIFIER:-all}"                          # 16S 'all' = blca,emu,nb
+# ===========================================================================
+
+# --- offline runtime setup (mirrors docs/gadi.md step 7) -------------------
+source /scratch/"$PROJ"/"$USER"/miniforge3/etc/profile.d/conda.sh
+module load singularity
+cd "$REPO"
+conda activate HiFiTaxa
+source set_apptainer_cache.sh
+export NXF_HOME="$PWD/.nextflow"
+export NXF_OFFLINE=true
+
+# --- build samples.tsv + metadata.tsv from the reads directory -------------
+SAMPLES="$OUTDIR/samples.tsv"
+METADATA="$OUTDIR/metadata.tsv"
+mkdir -p "$OUTDIR"
+{
+  printf 'sample-id\tabsolute-filepath\n'
+  for f in "$READS_DIR"/*.fastq.gz; do
+    printf '%s\t%s\n' "$(basename "$f" .fastq.gz)" "$f"
+  done
+} > "$SAMPLES"
+{
+  printf 'sample_name\tcondition\n'
+  tail -n +2 "$SAMPLES" | cut -f1 | while read -r s; do printf '%s\tatcc\n' "$s"; done
+} > "$METADATA"
+echo "[run] $(($(wc -l < "$SAMPLES") - 1)) samples from $READS_DIR"
+
+# --- run the pipeline (16S marker; GTDB references from docs/gadi.md step 5)-
+python bin/run_pipeline.py \
+  --input "$SAMPLES" --metadata "$METADATA" \
+  --classifier "$CLASSIFIER" \
+  --skip-gtdb-check \
+  --profile singularity --publish_dir_mode copy \
+  --outdir "$OUTDIR"
+
+echo "[run] done -> $OUTDIR"
