@@ -16,9 +16,9 @@
 #
 #PBS -P <proj>
 #PBS -q normal
-#PBS -l walltime=24:00:00
-#PBS -l ncpus=16
-#PBS -l mem=64GB
+#PBS -l walltime=47:00:00
+#PBS -l ncpus=48
+#PBS -l mem=192GB
 #PBS -l jobfs=100GB
 #PBS -l storage=scratch/<proj>+gdata/<proj>
 #PBS -l wd
