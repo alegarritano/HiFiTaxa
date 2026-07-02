@@ -16,7 +16,7 @@
 #PBS -l wd
 #PBS -N hifitaxa_16s
 #PBS -j oe
-set -euo pipefail
+set -eo pipefail
 
 # ============================ CONFIG (edit me) =============================
 PROJ="${PROJ:-<proj>}"                                   # NCI project code
@@ -27,7 +27,10 @@ CLASSIFIER="${CLASSIFIER:-all}"                          # 16S 'all' = blca,emu,
 # ===========================================================================
 
 # --- offline runtime setup (mirrors docs/gadi.md step 7) -------------------
-source /scratch/"$PROJ"/"$USER"/miniforge3/etc/profile.d/conda.sh
+# resolve conda (miniconda3 or miniforge3, on /scratch or $HOME); override: qsub -v CONDA_BASE=/path
+for _c in "${CONDA_BASE:-}" "/scratch/$PROJ/$USER/miniconda3" "/scratch/$PROJ/$USER/miniforge3" "$HOME/miniconda3" "$HOME/miniforge3"; do
+  [ -n "$_c" ] && [ -f "$_c/etc/profile.d/conda.sh" ] && { source "$_c/etc/profile.d/conda.sh"; break; }
+done
 module load singularity
 cd "$REPO"
 conda activate HiFiTaxa
