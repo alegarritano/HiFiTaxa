@@ -30,9 +30,11 @@ process emits_classify {
     minimap2 -cx map-hifi --secondary=yes -N 10 -p 0.95 -t ${task.cpus} \\
         ${params.emits_db} ${sampleFASTQ} > ${sampleID}.aln.paf
 
+    # emits writes the FULL abundance table to --output; stdout is only a summary
+    # (capturing stdout with '>' truncated the table to the top handful of taxa).
     emits run --input ${sampleID}.aln.paf --preset pacbio-hifi --rank species \\
-        > ${sampleID}_emits_species.tsv
+        --output ${sampleID}_emits_species.tsv
     emits run --input ${sampleID}.aln.paf --preset pacbio-hifi --rank genus \\
-        > ${sampleID}_emits_genus.tsv
+        --output ${sampleID}_emits_genus.tsv
     """
 }
