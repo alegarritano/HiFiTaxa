@@ -57,10 +57,32 @@ otu_id <- names(seqs)
 if (is.null(otu_id)) otu_id <- paste0("seq", seq_along(seqs))
 
 # ----- Step 1: genus-level Naive-Bayes (assignTaxonomy, genus reference) ------
-nb <- assignTaxonomy(seqs,
-  refFasta = genus_db, minBoot = minBoot_num,
-  multithread = threads, outputBootstraps = TRUE
-)
+# assignTaxonomy builds a (queries x 65,536-kmer) matrix; past ~32k queries that
+# single allocation exceeds R's 2^31 vector limit ("negative length vectors are
+# not allowed" from C_assign_taxonomy2). Classification is per-query independent,
+# so we batch the queries and rbind the results -- identical output, and lower
+# peak memory. Normal ASV sets (< QUERY_CHUNK) run in one call, unchanged; only
+# large query sets (e.g. the ~95k GTDB holdout test_10) are chunked.
+QUERY_CHUNK <- 20000L
+assign_tax_chunked <- function(query_seqs) {
+  if (length(query_seqs) <= QUERY_CHUNK) {
+    r <- assignTaxonomy(query_seqs, refFasta = genus_db, minBoot = minBoot_num,
+                        multithread = threads, outputBootstraps = TRUE)
+    return(list(tax = r$tax, boot = r$boot))
+  }
+  grp <- (seq_along(query_seqs) - 1L) %/% QUERY_CHUNK
+  tax_parts <- list(); boot_parts <- list()
+  for (g in sort(unique(grp))) {
+    message(sprintf("assignTaxonomy: query chunk %d/%d (%d seqs)",
+                    g + 1L, max(grp) + 1L, sum(grp == g)))
+    r <- assignTaxonomy(query_seqs[grp == g], refFasta = genus_db, minBoot = minBoot_num,
+                        multithread = threads, outputBootstraps = TRUE)
+    tax_parts[[length(tax_parts) + 1L]]   <- r$tax
+    boot_parts[[length(boot_parts) + 1L]] <- r$boot
+  }
+  list(tax = do.call(rbind, tax_parts), boot = do.call(rbind, boot_parts))
+}
+nb   <- assign_tax_chunked(seqs)
 tax  <- nb$tax    # character matrix, columns Kingdom..Genus (NA below minBoot)
 boot <- nb$boot   # integer matrix, bootstrap support 0-100 per NB rank
 
