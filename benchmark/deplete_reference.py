@@ -80,9 +80,19 @@ def species_from_taxonomy_field(lineage):
 
 
 def species_from_header(header):
-    # UNITE-style: '>Fungi;...;Genus species;' -> last non-empty ';' field
+    # Two UNITE header layouts:
+    #   BLCA-parsed style : '>Fungi;...;Genus species;'      -> last ';' field
+    #   EMITS unite.fasta : 'Name|acc|SH|refs|k__..;s__Genus_species' (pipe head,
+    #                       lineage tail, species as 's__Genus_species', underscored)
     parts = [p for p in header.rstrip(";").split(";") if p.strip()]
-    return parts[-1].strip() if parts else ""
+    if not parts:
+        return ""
+    last = parts[-1].strip()
+    m = re.search(r"s__(.+)$", last)          # EMITS: take the s__ field
+    if m:
+        return m.group(1).replace("_", " ").strip()
+    # bare 'Genus_species' (underscored) also -> 'Genus species'
+    return last.replace("_", " ").strip() if ("_" in last and " " not in last) else last
 
 
 def load_exclude(path, species_col, gtdb_fold):
