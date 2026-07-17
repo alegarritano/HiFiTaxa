@@ -107,8 +107,15 @@ else
     "$HOLDOUT/unite_singlestep_ref.fa.gz"
 
   # --- 3b. BLCA via taxonomy_only -------------------------------------------
+  # blca_minid/blca_mincov are passed EXPLICITLY, not left to the marker default.
+  # This job never sets params.marker (it selects ITS only by pointing blca_db/blca_tax
+  # at the UNITE-derived holdout), and nextflow.config's trailing marker block is
+  # resolved at config-parse time -- so it would silently hand us the 16S values
+  # (90/0.85) here. These are the ITS defaults from nextflow.config; keep them in sync.
   nextflow run . -entry taxonomy_only -profile singularity \
     --classifier blca \
+    --blca_minid 80 \
+    --blca_mincov 0.50 \
     --asv_fasta "$QUERY" \
     --gtdb_db_dir "$HOLDOUT" \
     --blca_db  "$HOLDOUT/reference_90.fasta" \

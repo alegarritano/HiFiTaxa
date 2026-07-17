@@ -24,6 +24,7 @@ process blca_classify {
         -r ${params.blca_tax} \\
         -q ${params.blca_db} \\
         --iset ${params.blca_minid} \\
+        --cvrset ${params.blca_mincov} \\
         -n ${params.blca_nper} \\
         --seed ${params.random_seed} \\
         -p 1 \\

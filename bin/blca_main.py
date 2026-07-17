@@ -64,14 +64,17 @@ def check_program(prgname):
         exit(1)
 
 
-def run_blastn(fsa, eset, nsub, db, proc):
+def run_blastn(fsa, eset, nsub, db, proc, iset):
     '''Running blastn with customized output format'''
     check_program("blastn")
     import subprocess
     print("> > Running blast!!")
-    # subprocess.call(['blastn','-query',fsa,'-evalue',str(eset),'-dust','no','-soft_masking','false','-db',db,'-num_threads',str(proc),'-outfmt','6 std score sstrand slen qlen','-max_target_seqs',str(nsub),'-out',fsa+'.blastn'])
+    # -perc_identity tracks --iset. It was previously hardcoded to 90, which silently
+    # capped --iset from below: blastn never returned a hit under 90% identity, so
+    # lowering --iset had no effect. The two must move together or the post-BLAST
+    # filter can only ever be stricter than the hit collection, never looser.
     subprocess.call(
-        ['blastn', '-query', fsa, '-evalue', str(eset), '-perc_identity', '90', '-soft_masking', 'false', '-db', db,
+        ['blastn', '-query', fsa, '-evalue', str(eset), '-perc_identity', str(iset), '-soft_masking', 'false', '-db', db,
          '-num_threads', str(proc), '-outfmt', '6 std score sstrand slen qlen', '-max_target_seqs', str(nsub), '-out',
          fsa + '.blastn'])
     print("> > Blastn Finished!!")
@@ -267,7 +270,7 @@ acc2tax = read_tax_acc(args.tax, IDlen=IDlenallow)
 
 ## Run blastn and output fas.blastn output
 if not args.skipblast:
-    run_blastn(args.fsa, args.eset, args.nsub, args.db, args.proc)
+    run_blastn(args.fsa, args.eset, args.nsub, args.db, args.proc, args.iset)
 elif args.skipblast:
     print(">  > blastn is skipped")
 
