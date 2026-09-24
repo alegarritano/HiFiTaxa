@@ -133,12 +133,17 @@ def load_taxonomy(path):
                 lin = [row[cols[r.lower()]].strip() if cols[r.lower()] < len(row) else ""
                        for r in RANKS]
                 conf = row[cols["confidence"]].strip() if "confidence" in cols and cols["confidence"] < len(row) else ""
-                tax[fid] = (lin, conf)
+                # BLCA's confidence CSV carries a per-rank bootstrap in <Rank>_conf columns.
+                rank_confs = []
+                for r in RANKS:
+                    ci = cols.get(r.lower() + "_conf")
+                    rank_confs.append(row[ci].strip() if ci is not None and ci < len(row) else "")
+                tax[fid] = (lin, conf, rank_confs)
             elif is_taxon:
                 taxon = row[cols["taxon"]].strip() if cols["taxon"] < len(row) else ""
                 lin = _parse_gtdb_taxon(taxon)
                 conf = row[cols["confidence"]].strip() if "confidence" in cols and cols["confidence"] < len(row) else ""
-                tax[fid] = (lin, conf)
+                tax[fid] = (lin, conf, [""] * 7)
 
         if peek is not None:
             emit(peek)
@@ -159,7 +164,10 @@ def main():
                     help="write taxonomy as a single 'Taxonomy' column "
                          "(d__X;p__Y;...) instead of 7 rank columns")
     ap.add_argument("--keep-confidence", action="store_true",
-                    help="include a Confidence column if the taxonomy file has one")
+                    help="include a single Confidence column if the taxonomy file has one")
+    ap.add_argument("--per-rank-confidence", action="store_true",
+                    help="append one confidence column per rank (Domain_conf ... Species_conf) "
+                         "from a per-rank taxonomy file such as blca_taxonomy_confidence.csv")
     args = ap.parse_args()
 
     print(f"[merge] freq    : {args.asv_freq}", file=sys.stderr)
@@ -186,7 +194,9 @@ def main():
             header.append("Taxonomy")
         else:
             header.extend(RANKS)
-        if args.keep_confidence:
+        if args.per_rank_confidence:
+            header.extend([r + "_conf" for r in RANKS])
+        elif args.keep_confidence:
             header.append("Confidence")
         w.writerow(header)
 
@@ -194,14 +204,16 @@ def main():
             row = [fid]
             for s in samples:
                 row.append(freq[fid].get(s, 0))
-            lin, conf = tax.get(fid, ([""] * 7, ""))
+            lin, conf, rank_confs = tax.get(fid, ([""] * 7, "", [""] * 7))
             if args.lineage_col:
                 # GTDB-prefixed single string; drop empty trailing ranks
                 parts = [f"{GTDB_RANK_LETTERS[i]}__{name}" for i, name in enumerate(lin) if name]
                 row.append(";".join(parts))
             else:
                 row.extend(lin)
-            if args.keep_confidence:
+            if args.per_rank_confidence:
+                row.extend(rank_confs)
+            elif args.keep_confidence:
                 row.append(conf)
             w.writerow(row)
 

@@ -27,6 +27,7 @@ include { mergeASV; filter_dada2; dada2_qc } from './modules/dada2'
 include { blca_classify; merge_blca } from './modules/taxonomy_blca'
 include { emu_classify; emu_collate } from './modules/emu'
 include { nb_classify; nb_classify_fasta; nb_classify_singlestep } from './modules/taxonomy_nb'
+include { merge_asv_table } from './modules/merge_table'
 // --- marker==ITS read-prep + taxonomy modules ---
 include { itsx_extract } from './modules/itsx'
 include { emits_classify } from './modules/taxonomy_emits'
@@ -293,6 +294,26 @@ workflow {
             emu_collate(emu_classify.out.abundance.collect())
         }
     }
+
+    // ---------------- Final per-classifier ASV table (counts + taxonomy + confidence) ----------------
+    // One wide TSV per ASV-based classifier: Feature ID, per-sample counts, the 7 ranks,
+    // and confidence (per-rank for BLCA, single bootstrap for NB). Emu/EMITS are read-level
+    // (no ASVs), so they are not merged. Published to $outdir/<classifier>_asv_table.tsv.
+    merge_inputs = channel.empty()
+    if (run_blca) {
+        merge_inputs = merge_inputs.mix(
+            filter_dada2.out.asv_freq_tsv
+                .combine(merge_blca.out.tax_conf)
+                .map { freq, tax -> tuple(freq, tax, 'blca', '--per-rank-confidence') })
+    }
+    if (run_nb) {
+        nb_tax = is_its ? nb_classify_singlestep.out.best_nb_tax : nb_classify.out.best_nb_tax
+        merge_inputs = merge_inputs.mix(
+            filter_dada2.out.asv_freq_tsv
+                .combine(nb_tax)
+                .map { freq, tax -> tuple(freq, tax, 'nb', '--keep-confidence') })
+    }
+    merge_asv_table(merge_inputs)
 }
 
 // Taxonomy-only entry: skip QC/denoise, classify an existing ASV/sequence fasta.
