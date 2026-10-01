@@ -2,7 +2,7 @@ process learn_error {
     conda (params.enable_conda ? "$projectDir/env/qiime2-amplicon-2024.10-py310-ubuntu-conda.yml" : null)
     container "quay.io/qiime2/amplicon@sha256:4038fd785bf4e76ddd6ec7a7f57abe94cdca6c5cd0a93d0924971a74eabd7cf2"
     publishDir "$params.outdir/dada2", mode: params.publish_dir_mode
-    cpus params.dada2_cpu
+    cpus (params.dada2_cpu ?: params.max_cpus)
 
     input:
     path error_sample 
@@ -22,7 +22,7 @@ process dada2_denoise {
     conda (params.enable_conda ? "$projectDir/env/qiime2-amplicon-2024.10-py310-ubuntu-conda.yml" : null)
     container "quay.io/qiime2/amplicon@sha256:4038fd785bf4e76ddd6ec7a7f57abe94cdca6c5cd0a93d0924971a74eabd7cf2"
     publishDir "$params.outdir/dada2", mode: params.publish_dir_mode
-    cpus params.dada2_cpu
+    cpus (params.dada2_cpu ?: params.max_cpus)
 
     input:
     path samples_qza
@@ -65,7 +65,7 @@ process dada2_denoise_with_error_model {
     conda (params.enable_conda ? "$projectDir/env/qiime2-amplicon-2024.10-py310-ubuntu-conda.yml" : null)
     container "quay.io/qiime2/amplicon@sha256:4038fd785bf4e76ddd6ec7a7f57abe94cdca6c5cd0a93d0924971a74eabd7cf2"
     publishDir "$params.outdir/dada2", mode: params.publish_dir_mode
-    cpus params.dada2_cpu
+    cpus (params.dada2_cpu ?: params.max_cpus)
 
     input:
     path samples_qza
@@ -110,7 +110,7 @@ process mergeASV {
     conda (params.enable_conda ? "$projectDir/env/qiime2-amplicon-2024.10-py310-ubuntu-conda.yml" : null)
     container "quay.io/qiime2/amplicon@sha256:4038fd785bf4e76ddd6ec7a7f57abe94cdca6c5cd0a93d0924971a74eabd7cf2"
     publishDir "$params.outdir/dada2", mode: params.publish_dir_mode
-    cpus params.dada2_cpu
+    cpus (params.dada2_cpu ?: params.max_cpus)
 
     input:
     path "dada2-ccs_rep*.qza"
@@ -149,7 +149,7 @@ process filter_dada2 {
     conda (params.enable_conda ? "$projectDir/env/qiime2-amplicon-2024.10-py310-ubuntu-conda.yml" : null)
     container "quay.io/qiime2/amplicon@sha256:4038fd785bf4e76ddd6ec7a7f57abe94cdca6c5cd0a93d0924971a74eabd7cf2"
     publishDir "$params.outdir/dada2", mode: params.publish_dir_mode
-    cpus params.dada2_cpu
+    cpus (params.dada2_cpu ?: params.max_cpus)
 
     input:
     path asv_table

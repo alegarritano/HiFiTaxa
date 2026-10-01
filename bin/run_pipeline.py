@@ -36,6 +36,25 @@ UNITE_REPO_URL = "https://unite.ut.ee/repository.php"
 
 PROJDIR = Path(__file__).resolve().parent.parent
 MARKER = PROJDIR / ".first_run_complete"
+# Fallback marker for shared installs where PROJDIR is read-only for the user.
+USER_MARKER = Path.home() / ".hifitaxa" / "first_run_complete"
+
+GTDB_BLCA_FASTA = "gtdb_ssu_BLCAparsed.fasta"
+GTDB_BLCA_TAX = "gtdb_ssu_BLCAparsed.taxonomy"
+
+
+def first_run_done():
+    return MARKER.exists() or USER_MARKER.exists()
+
+
+def mark_first_run_done():
+    """Write the first-run marker in the install, or in ~/.hifitaxa when the
+    install is read-only (e.g. a shared group install)."""
+    try:
+        MARKER.write_text("done\n")
+    except OSError:
+        USER_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        USER_MARKER.write_text("done\n")
 
 # ANSI colour for the resource-cost note in the welcome wizard.
 ANSI_RED = "\033[1;31m"
@@ -80,19 +99,24 @@ def welcome_wizard(args):
     print("────────── Phase 1: Interview ──────────")
     print()
 
-    # ---- Q1: GTDB ----------------------------------------------------------
-    print("Q1. The GTDB SSU reference database is required (used by every classifier).")
-    print(f"    Release: {args.gtdb_release}   (~3 GB download + ~10 min parsing, one-time)")
-    if not _ask_yn("Continue with this GTDB release?", default="y"):
-        print("[launcher] Aborted by user (re-run with --gtdb-release <N> to pin a release).")
-        sys.exit(0)
+    if args.skip_gtdb_check:
+        # The DB was already located by find_existing_gtdb(); nothing to download.
+        print("Q1. GTDB: using the existing DB as-is (--skip-gtdb-check; nothing is downloaded)")
+        print(f"    {args.gtdb_db_dir}")
+    else:
+        # ---- Q1: GTDB ------------------------------------------------------
+        print("Q1. The GTDB SSU reference database is required (used by every classifier).")
+        print(f"    Release: {args.gtdb_release}   (~3 GB download + ~10 min parsing, one-time)")
+        if not _ask_yn("Continue with this GTDB release?", default="y"):
+            print("[launcher] Aborted by user (re-run with --gtdb-release <N> to pin a release).")
+            sys.exit(0)
 
-    # ---- Q2: filter <1000 bp ----------------------------------------------
-    print()
-    print("Q2. Drop reference sequences shorter than 1000 bp from the GTDB DB?")
-    print("    Recommended for full-length 16S — short reference seqs add noise.")
-    keep_short = not _ask_yn("Apply the 1000 bp filter?", default="y")
-    args.min_ref_len = 0 if keep_short else 1000
+        # ---- Q2: filter <1000 bp ------------------------------------------
+        print()
+        print("Q2. Drop reference sequences shorter than 1000 bp from the GTDB DB?")
+        print("    Recommended for full-length 16S — short reference seqs add noise.")
+        keep_short = not _ask_yn("Apply the 1000 bp filter?", default="y")
+        args.min_ref_len = 0 if keep_short else 1000
 
     # The Emu / two-step NB prompts only apply to 16S. For the fungal ITS
     # marker the read-level EM classifier is EMITS (not Emu) and the NB design is
@@ -164,14 +188,20 @@ def welcome_wizard(args):
     # ---- Summary -----------------------------------------------------------
     print()
     print("────────── Your choices ──────────")
-    print(f"  • GTDB release         : {args.gtdb_release}")
-    print(f"  • Reference filter     : "
-          f"{'drop <1000 bp' if args.min_ref_len else 'keep all'}")
+    if args.skip_gtdb_check:
+        print(f"  • GTDB DB (existing)   : {args.gtdb_db_dir}")
+    else:
+        print(f"  • GTDB release         : {args.gtdb_release}")
+        print(f"  • Reference filter     : "
+              f"{'drop <1000 bp' if args.min_ref_len else 'keep all'}")
     print(f"  • Classifiers          : {args.classifier}")
     print(f"  • Validation run after : {'yes' if run_example else 'no'}")
     print()
     print(f"────────── Phase 2: Installing (unattended) ──────────")
-    print(f"  Sit back — total ~20-30 min on a fresh Linux machine.")
+    if args.skip_gtdb_check:
+        print(f"  GTDB DB used as-is; only missing Emu / NB references are built.")
+    else:
+        print(f"  Sit back — total ~20-30 min on a fresh Linux machine.")
     print()
 
     return {
@@ -570,6 +600,58 @@ def prepull_images(args, passthrough):
         for img in imgs:
             print(f"[images]   pulling {img} …")
             subprocess.run(["docker", "pull", "--platform", "linux/amd64", img])
+
+
+def _gtdb_db_usable(blca_db, blca_tax):
+    """Same test as preflight_gtdb.db_present: the taxonomy file plus a BLAST
+    index (.n*) next to the fasta."""
+    if not os.path.isfile(blca_tax):
+        return False
+    p = Path(blca_db)
+    return any(p.parent.glob(p.name + ".n*"))
+
+
+def find_existing_gtdb(args, blca_db, blca_tax):
+    """--skip-gtdb-check: use an already-built GTDB DB without querying GTDB
+    (offline-safe). Looks in --gtdb_db_dir, <projdir>/db and ./db (or at
+    explicit --blca_db/--blca_tax). If none is usable, asks for the folder when
+    interactive, else prints a hint. Returns (db_dir, blca_db, blca_tax) or None."""
+    if args.blca_db or args.blca_tax:
+        candidates = [(os.path.dirname(os.path.abspath(blca_db)), blca_db, blca_tax)]
+    else:
+        dirs = []
+        for d in (args.gtdb_db_dir, str(PROJDIR / "db"), os.path.join(os.getcwd(), "db")):
+            d = os.path.realpath(os.path.expanduser(d))
+            if d not in dirs:
+                dirs.append(d)
+        candidates = [(d, os.path.join(d, GTDB_BLCA_FASTA), os.path.join(d, GTDB_BLCA_TAX))
+                      for d in dirs]
+    for found in candidates:
+        if _gtdb_db_usable(found[1], found[2]):
+            return found
+
+    print("[launcher] --skip-gtdb-check: no built GTDB DB found in:")
+    for d, _, _ in candidates:
+        print(f"[launcher]   {d}")
+    if not sys.stdin.isatty():
+        print(f"[launcher] pass --gtdb_db_dir <folder holding {GTDB_BLCA_FASTA}, "
+              f"{GTDB_BLCA_TAX} and its BLAST index>")
+        return None
+    while True:
+        try:
+            ans = input("[launcher] Path to your GTDB DB folder (Enter to abort): ").strip()
+        except EOFError:
+            ans = ""
+        if not ans:
+            return None
+        d = os.path.abspath(os.path.expanduser(ans))
+        if os.path.isfile(d):
+            d = os.path.dirname(d)
+        found = (d, os.path.join(d, GTDB_BLCA_FASTA), os.path.join(d, GTDB_BLCA_TAX))
+        if _gtdb_db_usable(found[1], found[2]):
+            return found
+        print(f"[launcher]   not a built GTDB DB: {d}")
+        print(f"[launcher]   (needs {GTDB_BLCA_FASTA}, {GTDB_BLCA_TAX} and the BLAST index)")
 
 
 def preflight(args, blca_db, blca_tax):
@@ -1090,7 +1172,9 @@ def main():
     ap.add_argument("--blca_db", default=None)
     ap.add_argument("--blca_tax", default=None)
     ap.add_argument("--skip-gtdb-check", action="store_true",
-                    help="use the existing DB as-is (no version check, no build)")
+                    help="use an existing, already-built GTDB DB as-is: no GTDB query, no "
+                         "download, no build (offline-safe). Looks in --gtdb_db_dir, "
+                         "<projdir>/db and ./db; asks for the folder if none is found")
     ap.add_argument("--assume-yes", action="store_true",
                     help="non-interactive: build/rebuild the DB if missing or outdated")
     ap.add_argument("--assume-no", action="store_true",
@@ -1184,8 +1268,14 @@ def main():
         blca_db = args.blca_db or os.path.join(unite_db_dir, "unite_BLCAparsed.fasta")
         blca_tax = args.blca_tax or os.path.join(unite_db_dir, "unite_BLCAparsed.taxonomy")
     else:
-        blca_db = args.blca_db or os.path.join(args.gtdb_db_dir, "gtdb_ssu_BLCAparsed.fasta")
-        blca_tax = args.blca_tax or os.path.join(args.gtdb_db_dir, "gtdb_ssu_BLCAparsed.taxonomy")
+        blca_db = args.blca_db or os.path.join(args.gtdb_db_dir, GTDB_BLCA_FASTA)
+        blca_tax = args.blca_tax or os.path.join(args.gtdb_db_dir, GTDB_BLCA_TAX)
+        if args.skip_gtdb_check:
+            found = find_existing_gtdb(args, blca_db, blca_tax)
+            if not found:
+                return 2
+            args.gtdb_db_dir, blca_db, blca_tax = found
+            print(f"[launcher] --skip-gtdb-check: using the existing GTDB DB in {args.gtdb_db_dir}")
     emits_db = os.path.join(unite_db_dir, "unite.fasta")
     unite_singlestep_db = os.path.join(unite_db_dir, "unite_full_singlestep_ref.fa.gz")
     emu_db_dir = args.emu_db_dir or str(PROJDIR / "db_emu")
@@ -1217,7 +1307,7 @@ def main():
     # 30-min env build. The validation example run is queued for AFTER the
     # installs complete (see end of main()).
     wizard_decisions = None
-    if not MARKER.exists():
+    if not first_run_done():
         if interactive:
             wizard_decisions = welcome_wizard(args)
         else:
@@ -1225,7 +1315,7 @@ def main():
             # mark the welcome as done and proceed with whatever flags the
             # user passed.
             welcome_banner()
-            MARKER.write_text("done\n")
+            mark_first_run_done()
 
     # resolve inputs: explicit --input/--asv_fasta, else interactive sample-sheet build
     if not (args.asv_fasta or input_tsv):
@@ -1283,7 +1373,7 @@ def main():
     # data, so any setup problem surfaces against the known-good 8-sample ATCC
     # mock instead of disguising itself as a problem with the user's data.
     if (wizard_decisions and wizard_decisions["run_example"]
-            and not args.skip_test and not MARKER.exists()):
+            and not args.skip_test and not first_run_done()):
         print()
         print("────────── Phase 3: Validation run (bundled 8-sample ATCC mock) ──────────")
         rc = example_test(args, blca_db, blca_tax, passthrough)
@@ -1291,14 +1381,14 @@ def main():
             print(f"[launcher] validation failed (exit {rc}). Not marking first-run "
                   f"complete; fix the issue and re-run.")
             return rc
-        MARKER.write_text("done\n")
+        mark_first_run_done()
         print()
         print("[launcher] ✓ Install validated. Proceeding to your data run.")
         print()
-    elif not MARKER.exists():
+    elif not first_run_done():
         # Fresh install but user declined / skipped validation — still mark
         # first-run done so we don't ask again.
-        MARKER.write_text("done\n")
+        mark_first_run_done()
 
     entry = "taxonomy_only" if args.asv_fasta else None
     # taxonomy_only supports all three classifiers (BLCA, Emu, NB) on a FASTA.

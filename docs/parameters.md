@@ -37,6 +37,7 @@ builds the DB only when it is missing.
 | `--min_asv_totalfreq` / `--min_asv_sample` | 5 / 1 | ASV-level noise filter after DADA2 (BLCA and NB branches). `min_asv_totalfreq` drops ASVs whose summed read count across all samples is below the threshold; `min_asv_sample` drops ASVs present in fewer than this many samples. Both auto-drop to 0 for single-sample runs. |
 | `--blca_chunk_size` | auto | ASVs per BLCA chunk; auto splits into about (available cores − 2) chunks |
 | `--max_cpus` | cores − 2 | usable cores for auto-chunking the BLCA step (leaves headroom) |
+| `--dada2_cpu` | `--max_cpus` | threads for the DADA2 steps (learn errors, denoise, merge, filter); set lower to share a node |
 | `--blca_minid` | 90 | BLCA minimum percent identity |
 | `--emu_db_dir` | `db_emu/` | prebuilt Emu DB directory (auto-built from the GTDB BLCA DB on first Emu-enabled run) |
 | `--emu_type` | `map-hifi` | minimap2 preset Emu uses. `map-hifi` is the PacBio HiFi preset and the default. Others: `map-ont`, `map-pb`, `sr`, `lr:hq`. |

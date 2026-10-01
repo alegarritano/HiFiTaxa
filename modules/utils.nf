@@ -46,7 +46,7 @@ def helpMessage() {
     --omegac    OMEGA_C parameter for DADA2. (default: 1e-40)
     --learn_error_sample    Use this FASTQ to learn error model for DADA2 (e.g. low complexity
                             control in the same sequencing run with same library prep)
-    --dada2_cpu    Number of threads for DADA2 denoising (default: 8)
+    --dada2_cpu    Number of threads for DADA2 denoising (default: all usable cores, see --max_cpus)
     --vsearch_cpu    Number of threads for VSEARCH taxonomy classification (default: 8)
     --cutadapt_cpu    Number of threads for primer removal using cutadapt (default: 16)
     --outdir    Output directory name (default: "results")
