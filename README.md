@@ -53,7 +53,7 @@ interactively for batch/HPC jobs (everything via flags). Reads may be
 
 ### Interactive
 
-1. Put **all** your reads in a folder (default `00_Reads/`, or pass `--reads_dir /path`).
+1. Put **all** your reads in a folder (default `00_Reads/`, or pass `--reads-dir /path`).
 2. Start the pipeline:
 
    ```
@@ -61,7 +61,7 @@ interactively for batch/HPC jobs (everything via flags). Reads may be
    # fungal ITS instead of 16S:
    python bin/run_pipeline.py --profile singularity --marker ITS
    # reads elsewhere:
-   python bin/run_pipeline.py --profile singularity --reads_dir /scratch/me/fastqs
+   python bin/run_pipeline.py --profile singularity --reads-dir /scratch/me/fastqs
    ```
 3. The launcher scans the reads and writes `samples.tsv` (one row per read file)
    and `metadata.tsv` (one row per sample). It pauses for you to fill the
@@ -85,6 +85,14 @@ python bin/run_pipeline.py \
 ```
 
 The full flag and parameter reference is in **[docs/parameters.md](docs/parameters.md)**.
+
+**Large or very diverse datasets (e.g. soil).** DADA2 error learning is the slow
+step: its cost grows faster than linearly with the number and diversity of reads,
+and on about 1 million Revio soil reads it took a day on a 48-core node. Add
+`--n_reads_learn 100000` to learn the error model from a subset of reads; on Revio
+mock and soil data this gave the same ASV table and cut error learning several
+fold. A `pool` column in `metadata.tsv` denoises groups of samples separately
+and in parallel. See [docs/parameters.md](docs/parameters.md#speeding-up-dada2-on-large-or-revio-datasets).
 
 ### Taxonomy only (from an existing ASV FASTA)
 

@@ -38,6 +38,7 @@ builds the DB only when it is missing.
 | `--blca_chunk_size` | auto | ASVs per BLCA chunk; auto splits into about (available cores − 2) chunks |
 | `--max_cpus` | cores − 2 | usable cores for auto-chunking the BLCA step (leaves headroom) |
 | `--dada2_cpu` | `--max_cpus` | threads for the DADA2 steps (learn errors, denoise, merge, filter); set lower to share a node |
+| `--n_reads_learn` | 1000000 | reads used to learn the DADA2 error rates. Lowering it (e.g. 100000) shortens error learning on large or very diverse datasets; see the section below |
 | `--blca_minid` | 90 | BLCA minimum percent identity |
 | `--emu_db_dir` | `db_emu/` | prebuilt Emu DB directory (auto-built from the GTDB BLCA DB on first Emu-enabled run) |
 | `--emu_type` | `map-hifi` | minimap2 preset Emu uses. `map-hifi` is the PacBio HiFi preset and the default. Others: `map-ont`, `map-pb`, `sr`, `lr:hq`. |
@@ -67,3 +68,19 @@ quantitative on dereplicated input.
 - BLCA scores each ASV independently, so chunk size only affects speed, not the taxonomy.
 - BLCA runs with `-p 1` (the conda clustalo build has no OpenMP); parallelism comes from running chunks at the same time.
 - NB classifies each ASV independently, so the result does not depend on how many ASVs are in the run.
+
+## Speeding up DADA2 on large or Revio datasets
+
+DADA2 denoising is the slowest step on large or highly diverse datasets. These settings help:
+
+- **`--n_reads_learn`** caps the reads used to learn error rates (default 1,000,000). Learning cost grows with the number and diversity of reads, so on large or diverse datasets this is the most effective setting. On a Revio ATCC mock (415,000 reads) a 100,000-read cap gave identical ASVs and learned errors 4 times faster; on Revio soil samples a proportional cap reproduced the ASV table to 99.5% of reads while converging in fewer rounds.
+- **Revio / Kinnex reads** carry binned quality scores (7 bins, max Q40). DADA2's PacBio error function then logs `The max qual score of 93 was not detected. Using standard error fitting.` once per round of error learning. This is expected and harmless: on Revio mock and soil data the resulting ASV tables matched those from DADA2's dedicated binned-quality error model.
+- **Rounds of error learning.** DADA2 repeats error learning until the error model stops changing exactly, up to 10 rounds; each `max qual score` line in `dada2.log` marks one completed round. On deep, diverse data it usually runs all 10 (the pipeline prints nothing special when it does), because a few borderline reads change assignment every round even though the model has long stopped moving in any meaningful way. The result is sound; it only costs time. Fewer reads in error learning (`--n_reads_learn`) means fewer borderline reads and usually convergence in 4 to 6 rounds.
+- **A `pool` column in `metadata.tsv`** splits samples into groups that are denoised separately, as in pb-16s-nf. Pseudo-pooling then shares information only within a group, so it is faster but slightly less sensitive to rare ASVs shared across groups. Lower `--dada2_cpu` so the groups can run at the same time on one node.
+
+```
+sample_name	condition	pool
+S1	soil	A
+S2	soil	A
+S3	sediment	B
+```

@@ -57,6 +57,7 @@ process dada2_denoise {
         --p-front 'none' \
         --p-adapter 'none' \
         --p-n-threads $task.cpus \
+        --p-n-reads-learn $params.n_reads_learn \
         --p-pooling-method \'$params.pooling_method\'
     """
 }
@@ -102,6 +103,7 @@ process dada2_denoise_with_error_model {
         --p-front 'none' \
         --p-adapter 'none' \
         --p-n-threads $task.cpus \
+        --p-n-reads-learn $params.n_reads_learn \
         --p-pooling-method \'$params.pooling_method\'
     """
 }
