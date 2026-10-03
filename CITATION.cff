@@ -4,7 +4,7 @@ title: "HiFiTaxa: PacBio HiFi 16S denoising (QIIME2/DADA2) with BLCA, Emu or DAD
 authors:
   - family-names: Garritano
     given-names: Alessandro
-version: 1.2.2
+version: 1.2.3
 date-released: 2026-10-03
 license: MIT
 repository-code: "https://github.com/alegarritano/HiFiTaxa"

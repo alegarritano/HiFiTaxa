@@ -20,8 +20,10 @@ process QC_fastq {
         csvtk mutate2 -C '%' -t -n sample -e '"${sampleID}"' > ${sampleID}.seqkit.readstats.tsv
     seqkit stats -T -j $task.cpus -a ${sampleFASTQ} |\
         csvtk mutate2 -C '%' -t -n sample -e '"${sampleID}"' > ${sampleID}.seqkit.summarystats.tsv
+    # seqkit head closes the pipe once it has N reads, so seqkit seq exits 141 (SIGPIPE);
+    # under pipefail that is the expected outcome, not a failure. Any other non-zero exit still aborts.
     seqkit seq -j $task.cpus --min-qual $params.filterQ $sampleFASTQ |\
-        seqkit head -n $params.downsample --out-file ${sampleID}.filterQ${params.filterQ}.fastq.gz
+        seqkit head -n $params.downsample --out-file ${sampleID}.filterQ${params.filterQ}.fastq.gz || [ \$? -eq 141 ]
     """
     else
     """
