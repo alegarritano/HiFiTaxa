@@ -55,7 +55,7 @@ HIFITAXA_DATA=/path/to/run_dirs HIFITAXA_OUT=/path/to/out Rscript benchmark/anal
 
 ## Scripts, outputs and where they appear in the manuscript
 
-Run the table scripts first (01, 02, 04, 05, 07, 14, 16), then the figure scripts. All
+Run the table scripts first (01, 02, 04, 05, 07, 14, 16, 17), then the figure scripts. All
 outputs go to `HIFITAXA_OUT/tables/` and `HIFITAXA_OUT/figures/`.
 
 | script | tables | figures | manuscript |
@@ -68,7 +68,7 @@ outputs go to `HIFITAXA_OUT/tables/` and `HIFITAXA_OUT/figures/`.
 | `06_mock_taxaplots.R` | | `fig_mock_taxaplot_16s`, `fig_mock_taxaplot_its` | Supplementary Fig. S1 (16S) |
 | `07_mock_retrieval.R` | `mock_retrieval.csv`; with `FP_THRESH=0` and `FP_THRESH=0.0001`, `mock_retrieval_threshold_any_read.csv` and `mock_retrieval_threshold_0.01pct.csv` | `fig_mock_retrieval_16s`, `fig_mock_retrieval_its` | Supplementary Tables S2 and S11 |
 | `08_holdout_retrieval.R` | reads `holdout_accuracy.csv` and `holdout_orphan_backoff.csv` written by 01 | `fig_holdout_retrieval_16s`, `fig_holdout_retrieval_its` | working figures |
-| `09_figure2.R` | | `fig2_main` | Figure 2 |
+| `09_figure2.R` | `mock_detection_unassigned.csv` | `fig2_main` (drawn at 180 mm, 300 dpi; the PDF needs `pdftocairo` or Ghostscript to embed fonts) | Figure 2 |
 | `10_holdout_taxaplot.R` | | `fig_holdout_taxaplot_16s` | Supplementary Fig. S3 |
 | `11_holdout_decomposition.R` | reads `holdout_accuracy.csv` written by 01 | `fig_holdout_decomposition` | Supplementary Fig. S4 |
 | `12_runtimes.R` | `classifier_runtimes.csv` | `fig_classifier_runtimes` | not in the manuscript (parses `pipeline_trace.txt` of each run) |
@@ -76,6 +76,7 @@ outputs go to `HIFITAXA_OUT/tables/` and `HIFITAXA_OUT/figures/`.
 | `14_agreement_taxa.R` | `agreement_genus_16s_in_reference.csv`, `agreement_genus_16s_orphan.csv` | `fig_agreement_taxa_16s_in_reference`, `fig_agreement_taxa_16s_orphan` | Supplementary Tables S8 and S9; Supplementary Figs. S5 and S6 |
 | `15_holdout_16s_genus_weighted.R` | `holdout_16s_genus_weighted.csv`, `holdout_16s_genus_weighted_ecoli.csv` | | not in the manuscript (a table of an earlier draft) |
 | `16_holdout_identity_bins.R` | `holdout_accuracy_by_identity.csv` | | Supplementary Table S12 |
+| `17_mock_per_library.R` | `atcc_composition_genus_per_library.csv` (needs `atcc_composition_genus.csv` from 04) | | Supplementary Table S13 |
 
 Supplementary Table S10 (read tracking) is compiled from the pipeline's own read
 tracking tables (`stats.tsv`, `primer_removal_stats.tsv`) and not from these scripts.
