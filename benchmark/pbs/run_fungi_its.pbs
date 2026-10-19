@@ -4,12 +4,16 @@
 # (edit the CONFIG block below first, or override any var: `qsub -v READS_DIR=...`)
 #
 # Data provenance — 103-species fungal mock, PacBio Revio HiFi, full-ITS
-# (ITS9mun / ITS4ngsUni), ENA PRJEB108994:
+# (ITS9MUNngs / ITS4ngsUni), ENA PRJEB108994:
 #   Tedersoo L et al. (2026) Benchmarking full-length ITS metabarcoding across
-#   Illumina 2x500, PacBio and Nanopore using mock and soil communities. bioRxiv.
+#   Illumina 2 x 500, PacBio, and Oxford Nanopore sequencing using mock and soil
+#   communities. Molecular Ecology Resources 26, e70189. doi:10.1111/1755-0998.70189
 #   Code: github.com/Mycology-Microbiology-Center/fullITS-multiplatform-eval
-# NOTE: this mock's forward primer is ITS9mun (not the pipeline's 1391F default);
-# run benchmark/scan_primers.py on a read file to confirm and set the primers below.
+# NOTE: this mock's forward primer is ITS9MUNngs (not the pipeline's 1391F default).
+# The ITS path does not trim primers (itsxrust extracts the ITS region whatever primers
+# were used), so the primer setting only affects parameters.txt. The manuscript run used
+# the pipeline defaults, --min_asv_totalfreq 1 and --min_asv_sample 1 (default), which
+# retained all 138 ASVs.
 #
 #PBS -P <proj>
 #PBS -q normal

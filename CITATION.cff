@@ -1,48 +1,103 @@
 cff-version: 1.2.0
-message: "If you use HiFiTaxa, please cite this pipeline and the underlying tools."
-title: "HiFiTaxa: PacBio HiFi 16S denoising (QIIME2/DADA2) with BLCA, Emu or DADA2 Naive-Bayes taxonomy against GTDB"
+message: "If you use HiFiTaxa, please cite this pipeline and the underlying tools and references."
+title: "HiFiTaxa: a reproducible analysis pipeline for full length 16S rRNA gene and ITS amplicon sequencing from PacBio reads"
+abstract: "A single command Nextflow pipeline from raw PacBio HiFi reads to taxonomy for the full length 16S rRNA gene (GTDB) and the fungal ITS region (UNITE), with references rebuilt from the current releases and the classifiers BLCA, DADA2 naive Bayes, Emu (16S) and EMITS (ITS). The benchmark scoring and figure scripts of the manuscript are in benchmark/analysis/."
 authors:
   - family-names: Garritano
-    given-names: Alessandro
-version: 1.2.3
-date-released: 2026-10-03
+    given-names: Alessandro N.
+version: 1.2.4
+date-released: 2026-10-20
 license: MIT
 repository-code: "https://github.com/alegarritano/HiFiTaxa"
+keywords:
+  - 16S rRNA gene
+  - fungal ITS
+  - PacBio HiFi
+  - amplicon sequencing
+  - amplicon sequence variants
+  - GTDB
+  - UNITE
 references:
-  - type: article
-    title: "Reproducible, interactive, scalable and extensible microbiome data science using QIIME 2"
-    authors: [{family-names: Bolyen, given-names: Evan}]
-    journal: "Nature Biotechnology"
-    year: 2019
-  - type: article
-    title: "DADA2: High-resolution sample inference from Illumina amplicon data"
-    authors: [{family-names: Callahan, given-names: "Benjamin J"}]
-    journal: "Nature Methods"
-    year: 2016
-  - type: article
-    title: "BLCA: Bayesian-based LCA taxonomic classification"
-    authors: [{family-names: Gao, given-names: Xiang}, {family-names: Lin, given-names: Huaiying}, {family-names: Dong, given-names: Qunfeng}]
-    journal: "mSystems"
-    year: 2017
-  - type: article
-    title: "Emu: species-level microbial community profiling of full-length 16S rRNA Oxford Nanopore sequencing data"
-    authors: [{family-names: Curry, given-names: "Kristen D."}, {family-names: Treangen, given-names: "Todd J."}]
-    journal: "Nature Methods"
-    year: 2022
-  - type: article
-    title: "Naive Bayesian classifier for rapid assignment of rRNA sequences into the new bacterial taxonomy"
-    authors: [{family-names: Wang, given-names: Qiong}, {family-names: Garrity, given-names: "George M."}, {family-names: Tiedje, given-names: "James M."}, {family-names: Cole, given-names: "James R."}]
-    journal: "Applied and Environmental Microbiology"
-    year: 2007
-    doi: "10.1128/aem.00062-07"
-    url: "https://journals.asm.org/doi/10.1128/aem.00062-07"
-  - type: article
-    title: "GTDB: a standardized microbial taxonomy"
-    authors: [{family-names: Parks, given-names: "Donovan H"}]
-    journal: "Nucleic Acids Research"
-    year: 2022
   - type: article
     title: "Nextflow enables reproducible computational workflows"
     authors: [{family-names: "Di Tommaso", given-names: Paolo}]
     journal: "Nature Biotechnology"
+    volume: 35
     year: 2017
+    doi: "10.1038/nbt.3820"
+  - type: article
+    title: "SeqKit: a cross-platform and ultrafast toolkit for FASTA/Q file manipulation"
+    authors: [{family-names: Shen, given-names: Wei}]
+    journal: "PLOS ONE"
+    volume: 11
+    year: 2016
+    doi: "10.1371/journal.pone.0163962"
+  - type: article
+    title: "Cutadapt removes adapter sequences from high-throughput sequencing reads"
+    authors: [{family-names: Martin, given-names: Marcel}]
+    journal: "EMBnet.journal"
+    volume: 17
+    year: 2011
+    doi: "10.14806/ej.17.1.200"
+  - type: article
+    title: "Reproducible, interactive, scalable and extensible microbiome data science using QIIME 2"
+    authors: [{family-names: Bolyen, given-names: Evan}]
+    journal: "Nature Biotechnology"
+    volume: 37
+    year: 2019
+    doi: "10.1038/s41587-019-0209-9"
+  - type: article
+    title: "DADA2: High-resolution sample inference from Illumina amplicon data"
+    authors: [{family-names: Callahan, given-names: "Benjamin J."}]
+    journal: "Nature Methods"
+    volume: 13
+    year: 2016
+    doi: "10.1038/nmeth.3869"
+  - type: article
+    title: "ITSxRust: ITS region extraction with partial-chain recovery and structured diagnostics for long-read amplicon sequencing"
+    authors: [{family-names: "O'Brien", given-names: A.}]
+    journal: "Methods in Ecology and Evolution"
+    volume: 17
+    year: 2026
+    doi: "10.1111/2041-210X.70393"
+  - type: article
+    title: "A Bayesian taxonomic classification method for 16S rRNA gene sequences with improved species-level accuracy"
+    authors: [{family-names: Gao, given-names: Xiang}, {family-names: Lin, given-names: Huaiying}, {family-names: Revanna, given-names: Kashi}, {family-names: Dong, given-names: Qunfeng}]
+    journal: "BMC Bioinformatics"
+    volume: 18
+    year: 2017
+    doi: "10.1186/s12859-017-1670-4"
+  - type: article
+    title: "Naive Bayesian classifier for rapid assignment of rRNA sequences into the new bacterial taxonomy"
+    authors: [{family-names: Wang, given-names: Qiong}, {family-names: Garrity, given-names: "George M."}, {family-names: Tiedje, given-names: "James M."}, {family-names: Cole, given-names: "James R."}]
+    journal: "Applied and Environmental Microbiology"
+    volume: 73
+    year: 2007
+    doi: "10.1128/AEM.00062-07"
+  - type: article
+    title: "Emu: species-level microbial community profiling of full-length 16S rRNA Oxford Nanopore sequencing data"
+    authors: [{family-names: Curry, given-names: "Kristen D."}, {family-names: Treangen, given-names: "Todd J."}]
+    journal: "Nature Methods"
+    volume: 19
+    year: 2022
+    doi: "10.1038/s41592-022-01520-4"
+  - type: article
+    title: "EMITS: expectation-maximization abundance estimation for fungal ITS communities from long-read sequencing"
+    authors: [{family-names: "O'Brien", given-names: A.}]
+    journal: "Methods in Ecology and Evolution"
+    year: 2026
+    doi: "10.1111/2041-210X.70418"
+  - type: article
+    title: "GTDB release 10: A complete and systematic taxonomy for 715 230 bacterial and 17 245 archaeal genomes"
+    authors: [{family-names: Parks, given-names: "Donovan H."}]
+    journal: "Nucleic Acids Research"
+    volume: 54
+    year: 2026
+    doi: "10.1093/nar/gkaf1040"
+  - type: article
+    title: "The UNITE database for molecular identification and taxonomic communication of fungi and other eukaryotes: sequences, taxa and classifications reconsidered"
+    authors: [{family-names: Abarenkov, given-names: Kessy}]
+    journal: "Nucleic Acids Research"
+    volume: 52
+    year: 2024
+    doi: "10.1093/nar/gkad1039"

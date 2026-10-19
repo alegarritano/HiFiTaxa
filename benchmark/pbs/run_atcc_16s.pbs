@@ -3,8 +3,12 @@
 # job.  Submit with:  qsub benchmark/pbs/run_atcc_16s.pbs
 # (edit the CONFIG block below first, or override any var: `qsub -v READS_DIR=...`)
 #
-# Data provenance — ATCC MSA 16S mock (192-plex PacBio HiFi), downloaded from:
-#   http://downloads.pacbcloud.com/public/dataset/atcc_msa/16S_192plex_HiFi.fastq.tar.gz
+# Data provenance (the manuscript's 16S rRNA gene mock): the eight ATCC MSA-1003
+# staggered libraries of PacBio's public Kinnex 16S Revio data set
+#   https://downloads.pacbcloud.com/public/dataset/Kinnex-16S/DATA-ZymoATCCMix-32plex-Revio/
+# (2-Demux/fastq_files; forward barcodes F01 to F08 paired with reverse barcodes R37 to
+# R44, listed as the ATCC staggered mix in the data set's sample_primer_pairs_key.txt).
+# All reads of each library were used (2.9 to 4.0 million per library).
 #
 #PBS -P <proj>
 #PBS -q normal
@@ -66,10 +70,13 @@ python bin/run_pipeline.py \
   --input "$SAMPLES" --metadata "$METADATA" \
   --classifier "$CLASSIFIER" \
   --skip-gtdb-check --skip-emu-db-check --skip-nb-classifier-check --skip-test \
-  --min_asv_totalfreq 1 \
+  --min_asv_totalfreq 0 --min_asv_sample 0 \
+  --emu_threads 10 \
   --profile singularity --publish_dir_mode copy \
   --outdir "$OUTDIR"
-# --min_asv_totalfreq 1 keeps singleton ASVs so the rare mock tier (ATCC 0.02%
-# members) survives filtering; the default 5 drops them (see benchmark notes).
+# Both ASV filters are disabled (0 and 0) so that the 0.02% tier of the staggered mock
+# is retained and the exact composition can be scored; the pipeline defaults (5 reads in
+# 1 sample) would drop it. --emu_threads 10 is the setting of the manuscript run; Emu
+# took 14 to 21 h per library at full depth on Gadi.
 
 echo "[run] done -> $OUTDIR"

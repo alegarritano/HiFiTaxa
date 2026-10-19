@@ -19,14 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-------------------------------------------------------------------------------
-The MIT license above applies to the original code of this pipeline. Bundled
-third-party components retain their own licenses:
-
-  * bin/blca_main.py — BLCA (Bayesian-based LCA), Gao, Lin & Dong; GPL.
-  * modules/*.nf, scripts/run_dada_2023.2.R, scripts/learnError.R — derived
-    from PacBio HiFi-16S-workflow, Copyright (c) Pacific Biosciences;
-    BSD-3-Clause-Clear.
-
-See THIRD_PARTY_NOTICES / the headers of those files for full terms.

@@ -20,12 +20,17 @@ project code and the read/repo paths; each var is also overridable at submit tim
 
 ## Data provenance
 
-- **ATCC 16S mock** — ATCC MSA 16S, 192-plex PacBio HiFi. Downloaded from
-  <http://downloads.pacbcloud.com/public/dataset/atcc_msa/16S_192plex_HiFi.fastq.tar.gz>
-- **103-species fungal mock** — PacBio Revio HiFi, full-ITS (ITS9mun / ITS4ngsUni),
+- **ATCC MSA-1003 16S mock** — the eight staggered mix libraries of PacBio's public
+  Kinnex 16S Revio data set
+  <https://downloads.pacbcloud.com/public/dataset/Kinnex-16S/DATA-ZymoATCCMix-32plex-Revio/>
+  (`2-Demux/fastq_files`; forward barcodes F01 to F08 paired with reverse barcodes R37
+  to R44, listed as the ATCC staggered mix in `sample_primer_pairs_key.txt`). All reads
+  of each library (2.9 to 4.0 million) were used.
+- **103-species fungal mock** — PacBio Revio HiFi, full-ITS (ITS9MUNngs / ITS4ngsUni),
   ENA **PRJEB108994**. Reference:
   > Tedersoo L, *et al.* (2026). *Benchmarking full-length ITS metabarcoding across
-  > Illumina 2×500, PacBio and Nanopore using mock and soil communities.* bioRxiv.
+  > Illumina 2 × 500, PacBio, and Oxford Nanopore sequencing using mock and soil
+  > communities.* Molecular Ecology Resources 26, e70189. doi:10.1111/1755-0998.70189
   > Code: <https://github.com/Mycology-Microbiology-Center/fullITS-multiplatform-eval>
 
 ## 1. Find the primers used (`scan_primers.py`)
@@ -53,7 +58,11 @@ qsub -v READS_DIR=/scratch/<proj>/$USER/fungi_103      benchmark/pbs/run_fungi_i
 ```
 
 Each builds `samples.tsv` + `metadata.tsv` from its `READS_DIR`, then runs
-`bin/run_pipeline.py --classifier all` offline against the full database.
+`bin/run_pipeline.py --classifier all` offline against the full database. The 16S job
+disables both ASV filters (`--min_asv_totalfreq 0 --min_asv_sample 0`) so that the
+0.02% tier of the staggered mock is kept, and uses `--emu_threads 10`; the ITS job uses
+`--min_asv_totalfreq 1` with the default `--min_asv_sample 1`. These are the settings of
+the manuscript runs.
 
 ## Experiment 2 — mock vs clade-excluded DB (`clade_exclusion.pbs`)
 
@@ -94,8 +103,8 @@ python benchmark/split_unite_holdout.py --in-fasta db_unite/unite_BLCAparsed.fas
 Or split + rebuild BLCA/NB DBs from the 90% + classify the held-out 10% in one job:
 
 ```bash
-qsub -v MARKER=16S,TEST_SUBSAMPLE=3000 benchmark/pbs/holdout.pbs   # NB = two-step (GTDB)
-qsub -v MARKER=ITS                     benchmark/pbs/holdout.pbs   # NB = single-step (UNITE)
+qsub -v MARKER=16S,TEST_SUBSAMPLE=0 benchmark/pbs/holdout.pbs   # NB = two-step (GTDB)
+qsub -v MARKER=ITS                  benchmark/pbs/holdout.pbs   # NB = single-step (UNITE)
 ```
 
 NB handling matches the pipeline design: **two-step** (genus + addSpecies) for
@@ -109,10 +118,11 @@ NB handling matches the pipeline design: **two-step** (genus + addSpecies) for
 | `orphan_test_accessions.txt` | test species absent from train (species-level accuracy ceiling) |
 | `split_stats.json` | counts + species-coverage diagnostics |
 
-`TEST_SUBSAMPLE=N` caps how many held-out queries are classified (BLCA is per-query
-expensive; a full GTDB 10% is ~95k seqs). Predictions land in
-`benchmark_holdout_<marker>_seed42/results/taxonomy_{blca,nb}/`; score against
-`test_10.taxonomy`.
+`TEST_SUBSAMPLE=N` caps how many held-out queries are classified; `0` (the default,
+and the manuscript setting) classifies the whole held-out set (95,731 GTDB r232 and
+10,213 UNITE sequences). Predictions land in
+`benchmark_holdout_<marker>_seed42/results/taxonomy_{blca,nb}/`; score them with the
+scripts in `benchmark/analysis/` (see below).
 
 > **Cross-group reproducibility.** `random.Random(seed).shuffle` is stable across
 > Python 3 versions and machines, so the split is fully determined by two things:
@@ -123,3 +133,11 @@ expensive; a full GTDB 10% is ~95k seqs). Predictions land in
 > distribute the resulting `reference_90`/`test_10` files (and `split_stats.json`)
 > directly. Python is used rather than R precisely because R's `sample()` RNG
 > changed between R versions (the `sample.kind` change in R 3.6).
+
+## Scoring and figures (`analysis/`)
+
+The R scripts that turn the run directories of experiments 1 and 3 into the
+manuscript's supplementary tables, Figure 2 and the supplementary figures are in
+[`analysis/`](analysis/README.md), together with the Gadi jobs that measured the
+identity of every holdout test sequence to its closest training sequence. They read the
+run directories from `HIFITAXA_DATA` and write to `HIFITAXA_OUT`.

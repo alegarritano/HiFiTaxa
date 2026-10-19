@@ -241,8 +241,13 @@ write standalone files (safe to keep after `work/` is cleaned).
 
 ## License and citation
 
-The pipeline code is MIT (see `LICENSE`). Bundled tools keep their own licenses:
-BLCA (`bin/blca_main.py`, GPL) and the denoise modules adapted from PacBio's
-HiFi-16S-workflow (BSD-3-Clause-Clear). If you use it, please cite this repo
-(`CITATION.cff`) and the tools it wraps: QIIME2, DADA2, cutadapt, BLCA, Emu,
-GTDB, and Nextflow.
+The pipeline code is MIT (see `LICENSE`). Bundled components keep their own
+licences, reproduced in `THIRD_PARTY_NOTICES.md`: the BLCA script
+(`bin/blca_main.py`, GNU licence as stated by its authors, with the two
+modifications listed there) and the QC and denoise modules adapted from PacBio's
+HiFi-16S-workflow (BSD-3-Clause-Clear). If you use HiFiTaxa, please cite this repo
+(`CITATION.cff`) and the tools and references it wraps: Nextflow, seqkit,
+cutadapt, QIIME 2, DADA2, ITSxRust, BLCA, Emu, EMITS, GTDB and UNITE.
+
+The scoring and figure scripts of the manuscript's benchmarks are in
+`benchmark/analysis/` (see its README).

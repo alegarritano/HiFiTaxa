@@ -1,0 +1,128 @@
+#!/bin/bash
+# Resume the holdout identity analysis after a walltime kill, or run it from scratch with
+# all cores used: the remaining queries are split into NCHUNK pieces and searched by NCHUNK
+# single-thread blastn processes in parallel (blastn's own threading uses only a few cores here).
+# Submit from the same folder as identity.pbs:   qsub identity_resume.pbs
+#PBS -P is54
+#PBS -q normal
+#PBS -l walltime=12:00:00,ncpus=48,mem=190GB,jobfs=100GB
+#PBS -l storage=gdata/is54+scratch/is54
+#PBS -N holdout_identity_resume
+#PBS -j oe
+#PBS -l wd
+set -eo pipefail
+source /g/data/is54/apps/HiFiTaxa/hifitaxa_env.sh
+DB16=${DB16:-/g/data/is54/apps/HiFiTaxa/v1.2.0/db/gtdb_ssu_BLCAparsed.fasta}
+DBITS=${DBITS:-/g/data/is54/apps/HiFiTaxa/v1.2.3/db_unite/unite_BLCAparsed.fasta}
+MARKERS=${MARKERS:-"16s its"}
+NCHUNK=${NCHUNK:-${PBS_NCPUS:-48}}
+command -v blastn >/dev/null || { echo "blastn not on PATH after sourcing hifitaxa_env.sh" >&2; exit 2; }
+for M in $MARKERS; do
+  if [ -s identity_$M.tsv ]; then echo "[$M] identity_$M.tsv exists, skipping"; continue; fi
+  if [ "$M" = 16s ]; then FA=$DB16; else FA=$DBITS; fi
+  [ -s "$FA" ] || { echo "reference FASTA not found: $FA" >&2; exit 2; }
+  if [ ! -s exact_$M.tsv ] || [ ! -s query_$M.fasta ] || [ ! -s train_$M.fasta ]; then
+    echo "[$M] $(date) step 1: split $FA and find identical sequences"
+    python3 - "$M" "$FA" <<'PY'
+import sys
+m, fa = sys.argv[1], sys.argv[2]
+ids = {l.strip() for l in open(f"test_ids_{m}.txt") if l.strip()}
+test, train_seq_ids = {}, {}
+def flush(sid, seq):
+    s = "".join(seq).upper()
+    if sid in ids: test[sid] = s
+    else: train_seq_ids.setdefault(s, sid)
+with open(fa) as f, open(f"train_{m}.fasta", "w") as r:
+    sid, seq = None, []
+    for line in f:
+        if line.startswith(">"):
+            if sid is not None: flush(sid, seq)
+            sid, seq = line[1:].split()[0], []
+            if sid not in ids: r.write(line)
+        else:
+            seq.append(line.strip())
+            if sid not in ids: r.write(line)
+    if sid is not None: flush(sid, seq)
+exact = {q: train_seq_ids[s] for q, s in test.items() if s in train_seq_ids}
+with open(f"exact_{m}.tsv", "w") as o:
+    for q, t in exact.items(): o.write(f"{q}\t{t}\t100.0\t{len(test[q])}\t{len(test[q])}\n")
+with open(f"query_{m}.fasta", "w") as o:
+    for q, s in test.items():
+        if q not in exact: o.write(f">{q}\n{s}\n")
+print(f"[{m}] test sequences: {len(test)} of {len(ids)} listed; identical training sequence: {len(exact)}; to BLAST: {len(test)-len(exact)}")
+if not test: sys.exit("no test sequence found: wrong reference file?")
+PY
+  fi
+  if ! ls train_$M.nsq train_$M.*.nsq >/dev/null 2>&1; then
+    echo "[$M] $(date) makeblastdb"; makeblastdb -in train_$M.fasta -dbtype nucl -out train_$M > makeblastdb_$M.log
+  fi
+  echo "[$M] $(date) remaining queries"
+  python3 - "$M" <<'PY'
+import sys, os
+m = sys.argv[1]
+done = set()
+if os.path.exists(f"blast_{m}.raw.tsv"):
+    last = None
+    for l in open(f"blast_{m}.raw.tsv"):
+        q = l.split("\t", 1)[0]; done.add(q); last = q
+    done.discard(last)   # the last query may have been cut off mid write: search it again
+order, cur = [], None
+seqs = {}
+for line in open(f"query_{m}.fasta"):
+    if line.startswith(">"): cur = line[1:].strip(); order.append(cur); seqs[cur] = ""
+    else: seqs[cur] += line.strip()
+# blastn works through the query file in order, so everything before the last finished query is done
+# (queries without any hit leave no line; they are covered because they precede a finished one)
+if done:
+    last_done = max(i for i, q in enumerate(order) if q in done)
+    remaining = order[last_done + 1:]
+else:
+    remaining = order
+n = int(os.environ.get("NCHUNK", "48"))
+for i in range(n):
+    with open(f"chunk_{m}_{i:02d}.fasta", "w") as o:
+        for q in remaining[i::n]: o.write(f">{q}\n{seqs[q]}\n")
+print(f"[{m}] {len(order)} queries in total, {len(order) - len(remaining)} already searched, {len(remaining)} remaining in {n} chunks")
+PY
+  echo "[$M] $(date) blastn, $NCHUNK single thread processes"
+  for f in chunk_${M}_*.fasta; do
+    if [ -s "$f" ]; then
+      blastn -task megablast -query "$f" -db train_$M -num_threads 1 -max_target_seqs 5 -max_hsps 1 \
+        -perc_identity 80 -outfmt '6 qseqid sseqid pident length qlen slen' > "${f%.fasta}.tsv" &
+    fi
+  done
+  wait
+  cat chunk_${M}_*.tsv >> blast_$M.raw.tsv 2>/dev/null || true
+  rm -f chunk_${M}_*.fasta chunk_${M}_*.tsv
+  echo "[$M] $(date) best hit per query"
+  python3 - "$M" <<'PY'
+import sys
+m = sys.argv[1]
+best = {}
+for l in open(f"exact_{m}.tsv"):
+    q, s, pid, ln, ql = l.rstrip("\n").split("\t"); best[q] = (s, float(pid), int(ln), int(ql))
+for l in open(f"blast_{m}.raw.tsv"):
+    p = l.rstrip("\n").split("\t")
+    if len(p) < 6: continue
+    q, s, pid, ln, ql = p[0], p[1], float(p[2]), int(p[3]), int(p[4])
+    if ln / ql < 0.8: continue
+    if q not in best or pid > best[q][1] or (pid == best[q][1] and ln > best[q][2]):
+        best[q] = (s, pid, ln, ql)
+n = 0
+with open(f"identity_{m}.tsv", "w") as o:
+    o.write("id\tbest_hit\tpident\talnlen\tqlen\n")
+    for q in open(f"test_ids_{m}.txt"):
+        q = q.strip()
+        if not q: continue
+        n += 1
+        if q in best:
+            s, pid, ln, ql = best[q]; o.write(f"{q}\t{s}\t{pid}\t{ln}\t{ql}\n")
+        else:
+            o.write(f"{q}\tNA\tNA\tNA\tNA\n")
+b = {"100": 0, "99 to <100": 0, "97 to <99": 0, "<97": 0}
+for v in best.values():
+    p = v[1]; b["100" if p >= 100 else "99 to <100" if p >= 99 else "97 to <99" if p >= 97 else "<97"] += 1
+print(f"[{m}] queries: {n}; with a hit: {len(best)}; no hit: {n - len(best)}; bins: {b}")
+PY
+done
+echo "done $(date): copy identity_16s.tsv and identity_its.tsv back to the Mac"

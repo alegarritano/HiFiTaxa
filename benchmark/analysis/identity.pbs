@@ -1,0 +1,96 @@
+#!/bin/bash
+# Best hit identity of every holdout test sequence against its 90% training fraction (16S and ITS).
+# Submit from the folder that holds test_ids_16s.txt and test_ids_its.txt:   qsub identity.pbs
+# Needs blastn, makeblastdb and python3 (the shared HiFiTaxa driver env has them) and the BLCA-parsed
+# reference FASTA files of GTDB r232 and UNITE. Override paths or markers with -v, for example
+#   qsub -v DBITS=/path/unite_BLCAparsed.fasta identity.pbs      or      qsub -v MARKERS=16s identity.pbs
+# Step 1 finds test sequences with an identical training sequence without BLAST (about half of the
+# 16S test set); step 2 runs megablast only for the remainder.
+#PBS -P is54
+#PBS -q normal
+#PBS -l walltime=24:00:00,ncpus=48,mem=190GB,jobfs=100GB
+#PBS -l storage=gdata/is54+scratch/is54
+#PBS -N holdout_identity
+#PBS -j oe
+#PBS -l wd
+set -eo pipefail
+source /g/data/is54/apps/HiFiTaxa/hifitaxa_env.sh
+DB16=${DB16:-/g/data/is54/apps/HiFiTaxa/v1.2.0/db/gtdb_ssu_BLCAparsed.fasta}
+DBITS=${DBITS:-/g/data/is54/apps/HiFiTaxa/v1.2.3/db_unite/unite_BLCAparsed.fasta}
+MARKERS=${MARKERS:-"16s its"}
+THREADS=${THREADS:-${PBS_NCPUS:-48}}
+command -v blastn >/dev/null || { echo "blastn not on PATH after sourcing hifitaxa_env.sh" >&2; exit 2; }
+for M in $MARKERS; do
+  if [ "$M" = 16s ]; then FA=$DB16; else FA=$DBITS; fi
+  [ -s "$FA" ] || { echo "reference FASTA not found: $FA (set DB16/DBITS with qsub -v)" >&2; exit 2; }
+  echo "[$M] $(date) step 1: split $FA and find identical sequences"
+  python3 - "$M" "$FA" <<'PY'
+import sys
+m, fa = sys.argv[1], sys.argv[2]
+ids = {l.strip() for l in open(f"test_ids_{m}.txt") if l.strip()}
+test, train_seq_ids = {}, {}
+def flush(sid, seq):
+    s = "".join(seq).upper()
+    if sid in ids: test[sid] = s
+    else: train_seq_ids.setdefault(s, sid)
+with open(fa) as f, open(f"train_{m}.fasta", "w") as r:
+    sid, seq = None, []
+    for line in f:
+        if line.startswith(">"):
+            if sid is not None: flush(sid, seq)
+            sid, seq = line[1:].split()[0], []
+            if sid not in ids: r.write(line)
+        else:
+            seq.append(line.strip())
+            if sid not in ids: r.write(line)
+    if sid is not None: flush(sid, seq)
+missing = ids - set(test)
+exact = {q: train_seq_ids[s] for q, s in test.items() if s in train_seq_ids}
+with open(f"exact_{m}.tsv", "w") as o:
+    for q, t in exact.items(): o.write(f"{q}\t{t}\t100.0\t{len(test[q])}\t{len(test[q])}\n")
+with open(f"query_{m}.fasta", "w") as o:
+    for q, s in test.items():
+        if q not in exact: o.write(f">{q}\n{s}\n")
+print(f"[{m}] test sequences: {len(test)} of {len(ids)} listed (missing {len(missing)}); training: {len(train_seq_ids)} distinct sequences; "
+      f"identical training sequence: {len(exact)}; sent to BLAST: {len(test) - len(exact)}")
+if missing: open(f"missing_ids_{m}.txt", "w").write("\n".join(sorted(missing)) + "\n")
+if not test: sys.exit("no test sequence found: wrong reference file?")
+PY
+  echo "[$M] $(date) step 2: makeblastdb"
+  makeblastdb -in train_$M.fasta -dbtype nucl -out train_$M > makeblastdb_$M.log
+  echo "[$M] $(date) step 2: megablast of the remaining queries with $THREADS threads"
+  blastn -task megablast -query query_$M.fasta -db train_$M -num_threads "$THREADS" \
+    -max_target_seqs 5 -max_hsps 1 -perc_identity 80 -outfmt '6 qseqid sseqid pident length qlen slen' \
+    > blast_$M.raw.tsv
+  echo "[$M] $(date) step 3: best hit per query"
+  python3 - "$M" <<'PY'
+import sys
+m = sys.argv[1]
+best = {}
+for l in open(f"exact_{m}.tsv"):
+    q, s, pid, ln, ql = l.rstrip("\n").split("\t"); best[q] = (s, float(pid), int(ln), int(ql))
+for l in open(f"blast_{m}.raw.tsv"):
+    q, s, pid, ln, ql, sl = l.rstrip("\n").split("\t")[:6]
+    pid = float(pid); ln = int(ln); ql = int(ql)
+    if ln / ql < 0.8: continue
+    if q not in best or pid > best[q][1] or (pid == best[q][1] and ln > best[q][2]):
+        best[q] = (s, pid, ln, ql)
+n = 0
+with open(f"identity_{m}.tsv", "w") as o:
+    o.write("id\tbest_hit\tpident\talnlen\tqlen\n")
+    for q in open(f"test_ids_{m}.txt"):
+        q = q.strip()
+        if not q: continue
+        n += 1
+        if q in best:
+            s, pid, ln, ql = best[q]; o.write(f"{q}\t{s}\t{pid}\t{ln}\t{ql}\n")
+        else:
+            o.write(f"{q}\tNA\tNA\tNA\tNA\n")
+b = {"100": 0, "99 to <100": 0, "97 to <99": 0, "<97": 0}
+for v in best.values():
+    p = v[1]; b["100" if p >= 100 else "99 to <100" if p >= 99 else "97 to <99" if p >= 97 else "<97"] += 1
+print(f"[{m}] queries: {n}; with a hit: {len(best)}; no hit: {n - len(best)}; bins: {b}")
+PY
+  rm -f train_$M.n*
+done
+echo "done $(date): copy identity_16s.tsv and identity_its.tsv back to the Mac"

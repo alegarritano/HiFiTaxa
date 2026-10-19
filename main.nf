@@ -1,19 +1,21 @@
 /*
 ===============================================================================
  HiFiTaxa
- PacBio HiFi 16S amplicon pipeline:
-   QC -> primer trim -> ( QIIME2/DADA2 denoise -> ASV filter -> BLCA(GTDB) )
-                        and / or
-                      ( Emu (GTDB) species-level profiling on raw reads )
+ PacBio HiFi amplicon pipeline for the 16S rRNA gene (default) and fungal ITS:
+   16S: QC -> cutadapt primer trim -> ( QIIME2/DADA2 denoise -> ASV filter -> BLCA and/or
+        DADA2 naive Bayes against GTDB ) and/or ( Emu species-level profiling of the QC reads )
+   ITS: QC -> itsxrust ITS extraction -> ( DADA2 denoise -> BLCA and/or single-step naive
+        Bayes against UNITE ) and/or ( EMITS profiling of the extracted reads )
 
- Classifier choice is controlled by --classifier {blca|emu|nb|all}. BLCA
- stays the default; Emu is the EM-based species profiler (Curry et al. 2022,
- Nat. Methods); nb is DADA2's Naive-Bayes assignTaxonomy at genus level (Wang
- et al. 2007 AEM) plus exact-match addSpecies, running on DADA2 ASVs.
+ Classifier choice is controlled by --classifier {blca|emu|emits|nb|all}. BLCA is
+ the 16S default and EMITS the ITS default; Emu is the EM-based species profiler
+ (Curry et al. 2022, Nat. Methods); nb is DADA2's naive Bayes assignTaxonomy
+ (Wang et al. 2007 AEM) at genus level plus exact-match addSpecies for 16S, and a
+ single-step seven-rank assignTaxonomy for ITS, running on DADA2 ASVs.
 
  Denoising logic adapted from PacBio HiFi-16S-workflow (DADA2 via QIIME2);
- BLCA taxonomy runs against a GTDB BLCA-formatted database; Emu runs against a
- GTDB-formatted Emu database built by bin/build_gtdb_emu_db.sh.
+ BLCA taxonomy runs against a GTDB or UNITE BLCA-formatted database; Emu runs
+ against a GTDB-formatted Emu database built by bin/build_gtdb_emu_db.sh.
 ===============================================================================
 */
 nextflow.enable.dsl=2
