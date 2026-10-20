@@ -5,7 +5,7 @@ abstract: "A single command Nextflow pipeline from raw PacBio HiFi reads to taxo
 authors:
   - family-names: Garritano
     given-names: Alessandro N.
-version: 1.2.4
+version: 1.2.5
 date-released: 2026-10-20
 license: MIT
 repository-code: "https://github.com/alegarritano/HiFiTaxa"
