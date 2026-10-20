@@ -1,11 +1,11 @@
 cff-version: 1.2.0
 message: "If you use HiFiTaxa, please cite this pipeline and the underlying tools and references."
 title: "HiFiTaxa: a reproducible analysis pipeline for full length 16S rRNA gene and ITS amplicon sequencing from PacBio reads"
-abstract: "A single command Nextflow pipeline from raw PacBio HiFi reads to taxonomy for the full length 16S rRNA gene (GTDB) and the fungal ITS region (UNITE), with references rebuilt from the current releases and the classifiers BLCA, DADA2 naive Bayes, Emu (16S) and EMITS (ITS). The benchmark scoring and figure scripts of the manuscript are in benchmark/analysis/."
+abstract: "A single command Nextflow pipeline from raw PacBio HiFi reads to taxonomy for the full length 16S rRNA gene (GTDB) and the fungal ITS region (UNITE), with references rebuilt from the current releases and the classifiers BLCA, DADA2 naive Bayes, Emu (16S) and EMITS (ITS). The benchmark harness and the scoring and figure code of the manuscript are in https://github.com/alegarritano/HiFiTaxa_analysis."
 authors:
   - family-names: Garritano
     given-names: Alessandro N.
-version: 1.2.5
+version: 1.2.6
 date-released: 2026-10-20
 license: MIT
 repository-code: "https://github.com/alegarritano/HiFiTaxa"

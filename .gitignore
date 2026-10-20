@@ -32,5 +32,3 @@ __pycache__/
 # OS
 .DS_Store
 
-# outputs of the benchmark scoring scripts
-benchmark/analysis/regenerated/

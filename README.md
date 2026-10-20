@@ -249,5 +249,6 @@ HiFi-16S-workflow (BSD-3-Clause-Clear). If you use HiFiTaxa, please cite this re
 (`CITATION.cff`) and the tools and references it wraps: Nextflow, seqkit,
 cutadapt, QIIME 2, DADA2, ITSxRust, BLCA, Emu, EMITS, GTDB and UNITE.
 
-The scoring and figure scripts of the manuscript's benchmarks are in
-`benchmark/analysis/` (see its README).
+The benchmark harness (Gadi job scripts, holdout splitters, mock exclusion lists)
+and the scoring and figure code of the manuscript live in their own repository,
+https://github.com/alegarritano/HiFiTaxa_analysis.
