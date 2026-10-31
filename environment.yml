@@ -1,7 +1,7 @@
 # Main driver environment for HiFiTaxa.
-# Install locally with mamba (no channel/package needed):
-#     mamba env create -f environment.yml
-#     mamba activate HiFiTaxa
+# Install locally with mamba or plain conda (no channel/package needed):
+#     mamba env create -f environment.yml      (or: conda env create -f environment.yml)
+#     conda activate HiFiTaxa
 #
 # This env runs the launcher (run_pipeline.py), the GTDB preflight check, the
 # GTDB-database build (makeblastdb), and Nextflow itself. The per-process

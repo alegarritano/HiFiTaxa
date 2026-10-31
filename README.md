@@ -22,6 +22,9 @@ See **[docs/MARKER_AWARE.md](docs/MARKER_AWARE.md)** for the full marker design.
 
 - Nextflow 24.04 to 24.x (the launcher pins 24.10.9; Nextflow 25/26 will not parse the config)
 - Singularity/Apptainer (on an HPC) or Docker (on a laptop), or conda/mamba
+- At least 16 GB of RAM. The analysis steps are allocated 16 GB each (`cpu_def` in
+  `nextflow.config`), and the local executor will not start a task that asks for more
+  memory than the machine has
 - About 3 GB of free disk for the GTDB database (16S) or ~0.5 GB for UNITE (ITS), plus image cache, and internet for the first run
 
 ## Install
@@ -29,13 +32,14 @@ See **[docs/MARKER_AWARE.md](docs/MARKER_AWARE.md)** for the full marker design.
 ```
 git clone https://github.com/alegarritano/HiFiTaxa.git
 cd HiFiTaxa
-mamba env create -f environment.yml
+mamba env create -f environment.yml     # or: conda env create -f environment.yml
 conda activate HiFiTaxa
 source set_apptainer_cache.sh     # HPC: keep the image + conda caches inside the repo (off your $HOME quota)
 ```
 
 `environment.yml` installs a small driver environment: Nextflow, the launcher's
-Python dependencies, and makeblastdb for building the database. The actual
+Python dependencies, and makeblastdb for building the database. It is small enough
+that plain conda solves it quickly, so mamba is a convenience, not a requirement. The actual
 analysis tools come from containers (`-profile singularity` or `-profile docker`)
 or from conda environments you point at (`-profile standard`).
 
@@ -162,20 +166,33 @@ from <https://unite.ut.ee/repository.php> and the pipeline builds the BLCA / NB 
 EMITS references from it. To pin a release, rebuild, or build any reference by
 hand, see **[docs/databases.md](docs/databases.md)**.
 
+The databases are built by the launcher (`python bin/run_pipeline.py`), on its
+first run or when you pass `--test`. Calling `nextflow run` directly does **not**
+build them: if you want to use Nextflow directly, build them first with
+`bash bin/build_gtdb_db.sh 232 db` (16S) or the UNITE scripts in
+[docs/databases.md](docs/databases.md) (ITS).
+
 ## Test the install
 
-Run the bundled mocks to confirm each path end to end. `--classifier all` is
-marker-aware: it runs all three classifiers for whichever marker the profile sets
-(16S → BLCA + Emu + NB; ITS → BLCA + EMITS + NB).
+Run the bundled mocks to confirm each path end to end. Go through the launcher,
+which builds any missing database before it starts the run:
+
+```
+python bin/run_pipeline.py --test --profile singularity --classifier all   # 16S mock (GTDB): builds BLCA/Emu/NB references if missing, runs, compares with the stored reference
+```
+
+Swap `singularity` for `docker` on a laptop, or `standard` for conda.
+
+Once the databases exist you can also call Nextflow directly. `--classifier all`
+is marker-aware: it runs all three classifiers for whichever marker the profile
+sets (16S → BLCA + Emu + NB; ITS → BLCA + EMITS + NB). Nextflow does not build
+databases, so run the launcher at least once first (16S), or build the UNITE
+references from a downloaded release as in [docs/databases.md](docs/databases.md) (ITS):
 
 ```
 nextflow run . -profile test,singularity     --classifier all   # 16S mock  (GTDB)
 nextflow run . -profile test_its,singularity --classifier all   # fungal ITS mock (UNITE)
 ```
-
-Swap `singularity` for `docker` on a laptop, or `standard` for conda. Each
-classifier needs its database built; on the first run the launcher builds them
-automatically (16S: GTDB BLCA/Emu/NB; ITS: UNITE, from a release you download).
 
 ## Offline / air-gapped HPC
 
