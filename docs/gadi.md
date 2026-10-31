@@ -169,6 +169,9 @@ nextflow run . -profile test_its,singularity --classifier all   # ITS: BLCA + EM
 
 Requirements: 16S `emu` needs `db_emu/` and `nb` needs `db_nb/` (both from step 5);
 ITS needs `db_unite/` from step 5b and the two conda envs from step 4.
+Add `--check_db` to any of these commands to list the reference files that marker
+and classifier set need, and exit without running; a run with a missing file stops
+before any process starts and prints the build command.
 
 ### 9. Run your own data
 

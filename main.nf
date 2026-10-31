@@ -72,6 +72,109 @@ def run_emu  = 'emu'  in selected
 def run_nb   = 'nb'   in selected
 def selected_display = selected.collect { (it == 'emu' && is_its) ? 'emits' : it }
 
+// ---- reference database pre-flight -----------------------------------------
+// `nextflow run` on its own builds no reference database (the launcher,
+// bin/run_pipeline.py, does that on first use). So before any process is
+// submitted, check that every reference file the selected classifiers need for
+// this marker exists and is not empty, and stop with the build command for each
+// missing one, rather than failing hours into the run. --check_db prints the
+// same report and exits without running the pipeline. The tests mirror the
+// launcher preflights and bin/doctor.sh: file present and non-empty, and for
+// BLCA also the BLAST index that makeblastdb writes next to the FASTA. Under
+// -preview the result is reported but not enforced (CI compiles the workflow
+// without any database).
+def _rel = { p ->
+    def s = p.toString(); def root = "${projectDir}/"
+    s.startsWith(root) ? s.substring(root.length()) : s
+}
+def _size = { long n ->
+    n >= 1e9 ? String.format('%.1f GB', n / 1e9) : n >= 1e6 ? String.format('%.1f MB', n / 1e6)
+             : n >= 1e3 ? String.format('%.0f kB', n / 1e3) : "${n} B"
+}
+// One reference file: OK when present and non-empty (a dangling symlink is MISSING).
+def _file_item = { String cls, String what, String path, String fix ->
+    def f = new File(path)
+    def status = !f.isFile() ? 'MISSING' : f.length() == 0 ? 'EMPTY' : 'OK'
+    [cls: cls, what: what, path: _rel(path), status: status, note: status == 'OK' ? _size(f.length()) : '', fix: fix]
+}
+// The BLAST index next to a BLCA FASTA: makeblastdb -out <fasta> writes <fasta>.n??
+// (one volume) or <fasta>.NN.n?? volumes plus a <fasta>.nal alias for very large sets.
+def _blast_item = { String cls, String fasta, String fix ->
+    def f = new File(fasta).getAbsoluteFile()
+    def dir = f.getParentFile()
+    def idx = (dir?.isDirectory() ? dir.listFiles().toList() : []).findAll {
+        it.name.startsWith(f.name + '.') && it.name ==~ /.*\.n[a-z]{2}$/ && it.isFile() && it.length() > 0
+    }
+    def ext = idx.collect { it.name.substring(f.name.length()) }.sort()
+    def ok  = ('.nal' in ext) || ['.nhr', '.nin', '.nsq'].every { it in ext }
+    [cls: cls, what: 'BLAST index', path: _rel(fasta) + '.n*',
+     status: ok ? 'OK' : (idx ? 'INCOMPLETE' : 'MISSING'),
+     note: ok ? "${idx.size()} files" : (idx ? "found only ${ext.join(' ')}" : ''), fix: fix]
+}
+
+def db_items = []
+def db_howto
+if (is_its) {
+    def udir     = _rel(params.unite_db_dir)
+    def fix_blca = "bash bin/build_unite_blca_db.sh <unite_release.fasta> ${udir} 0"
+    def fix_nb   = "bash bin/build_unite_dada2_db.sh ${_rel(params.blca_db)} ${_rel(params.blca_tax)} ${_rel(params.unite_dada2_singlestep_db)}"
+    def fix_emits = "bash bin/build_emits_db.sh <unite_release.fasta> ${udir}"
+    if (run_blca) {
+        db_items << _file_item('blca', 'UNITE BLCA FASTA',    params.blca_db.toString(),  fix_blca)
+        db_items << _file_item('blca', 'UNITE BLCA taxonomy', params.blca_tax.toString(), fix_blca)
+        db_items << _blast_item('blca', params.blca_db.toString(), fix_blca)
+    }
+    if (run_nb)  db_items << _file_item('nb',    'UNITE single-step NB reference', params.unite_dada2_singlestep_db.toString(), fix_nb)
+    if (run_emu) db_items << _file_item('emits', 'EMITS minimap2 target, raw UNITE FASTA',  params.emits_db.toString(), fix_emits)
+    db_howto = "Run the build commands from ${projectDir}. <unite_release.fasta> is the UNITE general FASTA release for Fungi\n" +
+               "(sh_general_release_dynamic_*.fasta) downloaded from https://unite.ut.ee/repository.php. The launcher builds all three\n" +
+               "references from that file in one go: python bin/run_pipeline.py --marker ITS --unite-fasta <unite_release.fasta> ...\n" +
+               "See docs/databases.md."
+} else {
+    def rel  = (params.gtdb_release ?: '').toString() ==~ /\d+/ ? params.gtdb_release.toString() : '232'
+    def dirs = [_rel(params.gtdb_db_dir), _rel(params.nb_db_dir), _rel(params.emu_db_dir)]
+    def fix_gtdb = "bash bin/build_gtdb_db.sh ${rel} ${dirs[0]}" + ((dirs[1] != 'db_nb' || dirs[2] != 'db_emu') ? " ${dirs[1]} ${dirs[2]}" : '')
+    if (run_blca) {
+        db_items << _file_item('blca', 'GTDB BLCA FASTA',    params.blca_db.toString(),  fix_gtdb)
+        db_items << _file_item('blca', 'GTDB BLCA taxonomy', params.blca_tax.toString(), fix_gtdb)
+        db_items << _blast_item('blca', params.blca_db.toString(), fix_gtdb)
+    }
+    if (run_emu) {
+        db_items << _file_item('emu', 'Emu database taxonomy',  "${params.emu_db_dir}/taxonomy.tsv",        fix_gtdb)
+        db_items << _file_item('emu', 'Emu database sequences', "${params.emu_db_dir}/species_taxid.fasta", fix_gtdb)
+    }
+    if (run_nb) {
+        db_items << _file_item('nb', 'DADA2 NB genus reference',   params.gtdb_dada2_genus_db.toString(),   fix_gtdb)
+        db_items << _file_item('nb', 'DADA2 NB species reference', params.gtdb_dada2_species_db.toString(), fix_gtdb)
+    }
+    db_howto = "Run the build command from ${projectDir}; it downloads GTDB r${rel} once and asks which of BLCA, NB and Emu to format.\n" +
+               "The launcher builds whatever is missing without those questions: python bin/run_pipeline.py --test --classifier ${selected_display.join(',')}\n" +
+               "See docs/databases.md."
+}
+def db_missing = db_items.findAll { it.status != 'OK' }
+def db_title   = "Reference database check: marker ${MARKER}, classifier(s) ${selected_display.join(',')}, paths relative to ${projectDir}"
+def db_found   = db_items.collect { String.format('  %-6s %-10s %-44s %s%s', it.cls, it.status, it.path, it.what, it.note ? " (${it.note})" : '') }
+def db_fixes   = db_missing.collect { String.format('  %-6s %-10s %s (%s)  ->  %s', it.cls, it.status, it.path, it.what, it.fix) }
+
+if (params.check_db) {
+    log.info(db_title + '\n' + db_found.join('\n'))
+    if (db_missing) {
+        log.info("Missing or incomplete, with the command that builds each:\n" + db_fixes.join('\n') + '\n' + db_howto)
+        exit 1, "--check_db: ${db_missing.size()} of ${db_items.size()} reference file(s) missing or empty; nothing was run."
+    }
+    log.info("All ${db_items.size()} reference file(s) present. --check_db set, so exiting without running the pipeline.")
+    exit 0
+}
+if (db_missing) {
+    def db_msg = "ERROR: reference database check failed: ${db_missing.size()} of ${db_items.size()} reference file(s) missing or empty " +
+                 "for marker ${MARKER}, classifier(s) ${selected_display.join(',')} (paths relative to ${projectDir}).\n" +
+                 db_fixes.join('\n') + '\n' + db_howto + '\n' +
+                 "Calling nextflow run directly does not build the databases; nothing has been run. " +
+                 "Add --check_db to the same command to repeat this check on its own."
+    if (workflow.preview) log.warn(db_msg + "\n(-preview: reported only, not enforced)")
+    else                  error(db_msg)
+}
+
 // ---- dynamic parameters --------------------------------------------------
 if (params.input) {
     n_sample = file(params.input).countLines() - 1

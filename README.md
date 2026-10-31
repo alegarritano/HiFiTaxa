@@ -171,6 +171,9 @@ first run or when you pass `--test`. Calling `nextflow run` directly does **not*
 build them: if you want to use Nextflow directly, build them first with
 `bash bin/build_gtdb_db.sh 232 db` (16S) or the UNITE scripts in
 [docs/databases.md](docs/databases.md) (ITS).
+Every run checks the reference files its marker and classifiers need before any
+process starts and stops with the build command for each missing file; add
+`--check_db` to a `nextflow run` command to see that report without running the pipeline.
 
 ## Test the install
 
@@ -193,6 +196,10 @@ references from a downloaded release as in [docs/databases.md](docs/databases.md
 nextflow run . -profile test,singularity     --classifier all   # 16S mock  (GTDB)
 nextflow run . -profile test_its,singularity --classifier all   # fungal ITS mock (UNITE)
 ```
+
+Add `--check_db` to either command to list the reference files that marker and
+classifier set need, with the build command for any that is missing, and exit
+without running (see [docs/parameters.md](docs/parameters.md)).
 
 ## Offline / air-gapped HPC
 
