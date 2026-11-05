@@ -109,18 +109,3 @@ references:
     volume: 52
     year: 2024
     doi: "10.1093/nar/gkad1039"
-  - type: data
-    title: "UNITE general FASTA release for Fungi"
-    authors: [{family-names: Abarenkov, given-names: Kessy}, {family-names: Zirk, given-names: Allan}, {family-names: Piirmann, given-names: Timo}, {family-names: Pöhönen, given-names: Raivo}, {family-names: Ivanov, given-names: Filipp}, {family-names: Nilsson, given-names: "R. Henrik"}, {family-names: Kõljalg, given-names: Urmas}]
-    publisher: {name: "UNITE Community"}
-    version: "10.0"
-    date-released: 2025-02-19
-    year: 2025
-    doi: "10.15156/BIO/3301229"
-    notes: "The release the manuscript used; cite the release you built the references from"
-  - type: software
-    title: "HiFi-16S-workflow"
-    authors: [{name: "Pacific Biosciences"}]
-    repository-code: "https://github.com/PacificBiosciences/HiFi-16S-workflow"
-    license: BSD-3-Clause-Clear
-    notes: "Source of the QC, primer trimming and DADA2 denoising modules (see THIRD_PARTY_NOTICES.md)"
