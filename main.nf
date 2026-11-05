@@ -255,12 +255,64 @@ log_text = """
   Classifier(s):             ${selected_display.join(',')}${dada2_block}${blca_block}${readem_block}${nb_block}
 """
 
+// ---- citations for the tools a run used -------------------------------------
+// At the end of a successful run the pipeline prints which papers to cite for the
+// tools and references that this marker and classifier set actually used, and
+// writes the same list to <outdir>/CITATIONS.txt. Short forms only; the full
+// author lists and DOIs are in CITATION.cff and README.md (References and what
+// to cite). Keep the three files in step when a reference changes.
+def REFS = [
+    hifitaxa: "Garritano AN. HiFiTaxa v${workflow.manifest.version}. https://github.com/alegarritano/HiFiTaxa (see CITATION.cff)",
+    nextflow: "Di Tommaso P et al. (2017) Nextflow enables reproducible computational workflows. Nat Biotechnol 35:316-319. doi:10.1038/nbt.3820",
+    seqkit:   "Shen W et al. (2016) SeqKit: a cross-platform and ultrafast toolkit for FASTA/Q file manipulation. PLOS ONE 11:e0163962. doi:10.1371/journal.pone.0163962",
+    cutadapt: "Martin M (2011) Cutadapt removes adapter sequences from high-throughput sequencing reads. EMBnet.journal 17:10-12. doi:10.14806/ej.17.1.200",
+    qiime2:   "Bolyen E et al. (2019) Reproducible, interactive, scalable and extensible microbiome data science using QIIME 2. Nat Biotechnol 37:852-857. doi:10.1038/s41587-019-0209-9",
+    dada2:    "Callahan BJ et al. (2016) DADA2: high-resolution sample inference from Illumina amplicon data. Nat Methods 13:581-583. doi:10.1038/nmeth.3869",
+    dada2_ccs: "Callahan BJ et al. (2019) High-throughput amplicon sequencing of the full-length 16S rRNA gene with single-nucleotide resolution. Nucleic Acids Res 47:e103. doi:10.1093/nar/gkz569",
+    rdp_nb:   "Wang Q et al. (2007) Naive Bayesian classifier for rapid assignment of rRNA sequences into the new bacterial taxonomy. Appl Environ Microbiol 73:5261-5267. doi:10.1128/AEM.00062-07",
+    blca:     "Gao X et al. (2017) A Bayesian taxonomic classification method for 16S rRNA gene sequences with improved species-level accuracy. BMC Bioinformatics 18:247. doi:10.1186/s12859-017-1670-4",
+    emu:      "Curry KD et al. (2022) Emu: species-level microbial community profiling of full-length 16S rRNA Oxford Nanopore sequencing data. Nat Methods 19:845-853. doi:10.1038/s41592-022-01520-4",
+    itsxrust: "O'Brien A et al. (2026) ITSxRust: ITS region extraction with partial-chain recovery and structured diagnostics for long-read amplicon sequencing. Methods Ecol Evol 17:2843-2853. doi:10.1111/2041-210X.70393",
+    emits:    "O'Brien A et al. (2026) EMITS: expectation-maximization abundance estimation for fungal ITS communities from long-read sequencing. Methods Ecol Evol 17:3233-3244. doi:10.1111/2041-210X.70418",
+    gtdb:     "Parks DH et al. (2026) GTDB release 10: a complete and systematic taxonomy for 715 230 bacterial and 17 245 archaeal genomes. Nucleic Acids Res 54:D743-D754. doi:10.1093/nar/gkaf1040",
+    unite:    ["Abarenkov K et al. (2024) The UNITE database for molecular identification and taxonomic communication of fungi and other eukaryotes: sequences, taxa and classifications reconsidered. Nucleic Acids Res 52:D791-D797. doi:10.1093/nar/gkad1039",
+               "and the UNITE release you built from, e.g. Abarenkov K et al. (2025) UNITE general FASTA release for Fungi, version 10.0 (19 Feb 2025). UNITE Community. doi:10.15156/BIO/3301229"],
+]
+// its: marker ITS. reads: raw reads went through QC (false for -entry taxonomy_only).
+// trim: cutadapt ran (16S without --skip_primer_trim). asvs: QIIME 2 + DADA2 denoising
+// ran (BLCA or NB on ASVs). blca / nb / em: those classifiers ran; em is Emu for 16S
+// and EMITS for ITS. NB is DADA2's assignTaxonomy, so it cites DADA2 and Wang et al.
+// Denoising cites both DADA2 papers: the 2016 method and the 2019 PacBio CCS workflow
+// that qiime dada2 denoise-ccs runs (for ITS as well as 16S).
+def citation_text = { boolean its, boolean reads, boolean trim, boolean asvs, boolean blca, boolean nb, boolean em ->
+    def rows = []
+    rows << ['HiFiTaxa', 'the pipeline', REFS.hifitaxa]
+    rows << ['Nextflow', 'workflow engine', REFS.nextflow]
+    if (reads)                 rows << ['seqkit',   'read QC, quality and length filtering', REFS.seqkit]
+    if (reads && its)          rows << ['ITSxRust', 'ITS extraction from the QC reads', REFS.itsxrust]
+    if (reads && !its && trim) rows << ['cutadapt', 'primer trimming', REFS.cutadapt]
+    if (asvs)                  rows << ['QIIME 2',  'read import, DADA2 denoising wrapper and ASV tables', REFS.qiime2]
+    if (asvs || nb)            rows << ['DADA2',    (asvs ? 'ASV denoising of the CCS reads (denoise-ccs)' : '') + (asvs && nb ? ' and ' : '') +
+                                                    (nb ? (its ? 'the NB classifier (assignTaxonomy)' : 'the NB classifier (assignTaxonomy, addSpecies)') : ''),
+                                                    asvs ? [REFS.dada2, REFS.dada2_ccs] : REFS.dada2]
+    if (blca)                  rows << ['BLCA',     'ASV taxonomy with per-rank bootstrap confidence', REFS.blca]
+    if (nb)                    rows << ['NB',       'the naive Bayes algorithm that DADA2 assignTaxonomy implements', REFS.rdp_nb]
+    if (em && !its)            rows << ['Emu',      'read-level species profiling', REFS.emu]
+    if (em && its)             rows << ['EMITS',    'read-level ITS profiling', REFS.emits]
+    rows << [its ? 'UNITE' : 'GTDB', 'reference sequences and taxonomy', its ? REFS.unite : REFS.gtdb]
+    // the third element is one reference or a list of them, each on its own indented line
+    rows.collect { r -> String.format('  %-9s %s', r[0], r[1]) + [r[2]].flatten().collect { "\n            ${it}" }.join('') }.join('\n')
+}
+// Set by whichever workflow entry runs; read by workflow.onComplete at the end of the file.
+def cite = [text: null]
+
 workflow {
     if (!params.input)    { exit 1, "ERROR: --input <samples.tsv> is required" }
     if (!params.metadata) { exit 1, "ERROR: --metadata <metadata.tsv> is required" }
 
     log.info(log_text)
     write_log(log_text)
+    cite.text = citation_text(is_its, true, !params.skip_primer_trim, run_blca || run_nb, run_blca, run_nb, run_emu)
 
     sample_file = channel.fromPath(params.input)
         .splitCsv(header: ['sample', 'fastq'], skip: 1, sep: "\t")
@@ -446,6 +498,7 @@ workflow taxonomy_only {
         to_blca = true
         log.info("No blca/emu/nb in --classifier; defaulting to BLCA.")
     }
+    cite.text = citation_text(is_its, false, false, false, to_blca, to_nb, to_emu)
 
     if (to_blca) {
         log.info("Taxonomy-only: BLCA on ${params.asv_fasta} vs ${params.blca_db}")
@@ -473,5 +526,28 @@ workflow taxonomy_only {
         r_script   = channel.fromPath(params.dadaAssign_script,     checkIfExists: true)
         nb_classify_fasta(channel.fromPath(params.asv_fasta, checkIfExists: true),
                           genus_ch, species_ch, r_script)
+    }
+}
+
+// ---- end of run: what to cite ------------------------------------------------
+// Printed after a successful run (under -preview as the list the command would
+// use) and written to <outdir>/CITATIONS.txt next to parameters.txt. Nothing is
+// printed when the run failed, or when it stopped before the workflow started
+// (--check_db, a failed reference database check).
+workflow.onComplete {
+    if (!workflow.success || !cite.text) return
+    def header = workflow.preview
+        ? "Tools this command would use; please cite them when you publish (-preview, nothing was run):"
+        : "Please cite the tools this run used (full references in CITATION.cff and README.md):"
+    def body = "\n  ${header}\n${cite.text}"
+    if (workflow.preview) { log.info(body); return }
+    try {
+        def out = file(params.outdir).toAbsolutePath()
+        out.mkdirs()
+        out.resolve('CITATIONS.txt').text = "${header}\n${cite.text}\n"
+        log.info(body + "\n  This list is also in ${out.resolve('CITATIONS.txt')}")
+    } catch (Exception e) {
+        log.info(body)
+        log.warn("Could not write ${params.outdir}/CITATIONS.txt: ${e.message}")
     }
 }

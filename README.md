@@ -117,7 +117,7 @@ classifiers, all anchored on the same GTDB release:
 
 - **BLCA** (default). Bayesian LCA over BLAST hits with **per rank bootstrap
   confidence** for every ASV. Runs on DADA2 denoised ASVs (Gao *et al.* 2017,
-  *mSystems*).
+  *BMC Bioinformatics*).
 - **Emu**. EM based species level abundance estimator. Runs on the trimmed raw
   reads (no DADA2), with strong species level resolution and a low false
   positive rate (Curry *et al.* 2022, *Nat. Methods*).
@@ -211,6 +211,8 @@ node once, then run offline. See **[docs/offline.md](docs/offline.md)** (and
 
 Always:
 - `stats.tsv`, read tracking through the pipeline.
+- `CITATIONS.txt`, the papers to cite for the tools this run used (also printed
+  at the end of the run).
 
 When `--classifier` includes `blca`:
 - `dada2/dada2_ASV.fasta`, filtered ASV sequences
@@ -246,22 +248,73 @@ write standalone files (safe to keep after `work/` is cleaned).
 - NB classifies each ASV independently against the references, so the result
   does not depend on how many ASVs are in the run.
 
-## References
+## References and what to cite
 
-- Bolyen E *et al.* *Reproducible, interactive, scalable and extensible
-  microbiome data science using QIIME 2.* Nature Biotechnology 37, 852–857 (2019).
-- Callahan BJ *et al.* *DADA2: High resolution sample inference from Illumina
-  amplicon data.* Nature Methods 13, 581–583 (2016). The denoiser, and the
-  `assignTaxonomy` + `addSpecies` used in the NB branch.
-- Wang Q *et al.* *Naive Bayesian classifier for rapid assignment of rRNA
-  sequences into the new bacterial taxonomy.* Applied and Environmental
-  Microbiology 2007, [10.1128/aem.00062-07](https://journals.asm.org/doi/10.1128/aem.00062-07).
-- Gao X, Lin H, Dong Q. *A Bayesian taxonomic classification method for 16S rRNA
-  gene sequences with improved species level accuracy.* mSystems 2017. The BLCA classifier.
-- Curry KD *et al.* *Emu: species level microbial community profiling of full
-  length 16S rRNA Oxford Nanopore sequencing data.* Nature Methods 2022. The Emu classifier.
-- Parks DH *et al.* *GTDB: a complete and systematic taxonomy.* Nucleic Acids
-  Research 2025. The reference database.
+If you use HiFiTaxa, please cite this repository (`CITATION.cff`, which holds the
+full author lists and DOIs of every entry below) together with the tools and
+references your run used. Which ones depends on the marker and the classifiers,
+so every successful run prints the list for its own settings at the end and
+writes it to `<outdir>/CITATIONS.txt`. As a guide:
+
+Every run:
+- HiFiTaxa itself (`CITATION.cff`).
+- Nextflow. Di Tommaso P *et al.* *Nextflow enables reproducible computational
+  workflows.* Nature Biotechnology 35, 316–319 (2017). doi:10.1038/nbt.3820
+- seqkit, read QC and length filtering. Shen W *et al.* *SeqKit: a cross-platform
+  and ultrafast toolkit for FASTA/Q file manipulation.* PLOS ONE 11, e0163962
+  (2016). doi:10.1371/journal.pone.0163962
+- The reference database. For 16S, GTDB: Parks DH *et al.* *GTDB release 10: a
+  complete and systematic taxonomy for 715 230 bacterial and 17 245 archaeal
+  genomes.* Nucleic Acids Research 54, D743–D754 (2026). doi:10.1093/nar/gkaf1040.
+  For ITS, UNITE: Abarenkov K *et al.* *The UNITE database for molecular
+  identification and taxonomic communication of fungi and other eukaryotes:
+  sequences, taxa and classifications reconsidered.* Nucleic Acids Research 52,
+  D791–D797 (2024). doi:10.1093/nar/gkad1039
+- For 16S, cutadapt trims the primers. Martin M. *Cutadapt removes adapter
+  sequences from high-throughput sequencing reads.* EMBnet.journal 17, 10–12 (2011).
+  doi:10.14806/ej.17.1.200
+- The QC, primer trimming and DADA2 denoising modules were adapted from PacBio's
+  HiFi-16S-workflow, https://github.com/PacificBiosciences/HiFi-16S-workflow
+  (BSD-3-Clause-Clear; see `THIRD_PARTY_NOTICES.md`).
+
+If you used the DADA2 or NB module (`--classifier blca` or `nb`; both denoise ASVs
+with DADA2 through QIIME 2):
+- Callahan BJ *et al.* *DADA2: high-resolution sample inference from Illumina
+  amplicon data.* Nature Methods 13, 581–583 (2016). doi:10.1038/nmeth.3869
+- Callahan BJ *et al.* *High-throughput amplicon sequencing of the full-length 16S
+  rRNA gene with single-nucleotide resolution.* Nucleic Acids Research 47, e103
+  (2019). doi:10.1093/nar/gkz569. This is the DADA2 workflow for PacBio CCS reads
+  that QIIME 2's `denoise-ccs` runs, for ITS as well as 16S.
+- Bolyen E *et al.* *Reproducible, interactive, scalable and extensible microbiome
+  data science using QIIME 2.* Nature Biotechnology 37, 852–857 (2019).
+  doi:10.1038/s41587-019-0209-9
+- For `nb` also the naive Bayes algorithm that DADA2's `assignTaxonomy` implements:
+  Wang Q *et al.* *Naive Bayesian classifier for rapid assignment of rRNA sequences
+  into the new bacterial taxonomy.* Applied and Environmental Microbiology 73,
+  5261–5267 (2007). doi:10.1128/AEM.00062-07
+
+If you used BLCA (`--classifier blca`, the 16S default):
+- Gao X, Lin H, Revanna K, Dong Q. *A Bayesian taxonomic classification method
+  for 16S rRNA gene sequences with improved species-level accuracy.* BMC
+  Bioinformatics 18, 247 (2017). doi:10.1186/s12859-017-1670-4
+
+If you used Emu (`--classifier emu`, 16S):
+- Curry KD *et al.* *Emu: species-level microbial community profiling of
+  full-length 16S rRNA Oxford Nanopore sequencing data.* Nature Methods 19,
+  845–853 (2022). doi:10.1038/s41592-022-01520-4
+
+If you used the ITS marker (`--marker ITS`), ITSxRust extracts the ITS region
+from every read, and EMITS is the default classifier:
+- O'Brien A *et al.* *ITSxRust: ITS region extraction with partial-chain recovery
+  and structured diagnostics for long-read amplicon sequencing.* Methods in
+  Ecology and Evolution 17, 2843–2853 (2026). doi:10.1111/2041-210X.70393
+- O'Brien A *et al.* *EMITS: expectation-maximization abundance estimation for
+  fungal ITS communities from long-read sequencing.* Methods in Ecology and
+  Evolution 17, 3233–3244 (2026). doi:10.1111/2041-210X.70418
+- The UNITE release you built the references from. The paper used Abarenkov K,
+  Zirk A, Piirmann T, Pöhönen R, Ivanov F, Nilsson RH, Kõljalg U. *UNITE general
+  FASTA release for Fungi*, version 10.0 (19 February 2025). UNITE Community.
+  doi:10.15156/BIO/3301229
 
 ## License and citation
 
@@ -270,8 +323,8 @@ licences, reproduced in `THIRD_PARTY_NOTICES.md`: the BLCA script
 (`bin/blca_main.py`, GNU licence as stated by its authors, with the two
 modifications listed there) and the QC and denoise modules adapted from PacBio's
 HiFi-16S-workflow (BSD-3-Clause-Clear). If you use HiFiTaxa, please cite this repo
-(`CITATION.cff`) and the tools and references it wraps: Nextflow, seqkit,
-cutadapt, QIIME 2, DADA2, ITSxRust, BLCA, Emu, EMITS, GTDB and UNITE.
+(`CITATION.cff`) and the tools your run used; the section above says which paper
+goes with which module, and every run prints the list for its own settings.
 
 The benchmark harness (Gadi job scripts, holdout splitters, mock exclusion lists)
 and the scoring and figure code of the manuscript live in their own repository,
