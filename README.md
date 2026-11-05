@@ -263,6 +263,13 @@ Every run:
 - seqkit, read QC and length filtering. Shen W *et al.* *SeqKit: a cross-platform
   and ultrafast toolkit for FASTA/Q file manipulation.* PLOS ONE 11, e0163962
   (2016). doi:10.1371/journal.pone.0163962
+- For 16S, the GTDB reference. Parks DH *et al.* *GTDB release 10: a complete and
+  systematic taxonomy for 715 230 bacterial and 17 245 archaeal genomes.* Nucleic
+  Acids Research 54, D743–D754 (2026). doi:10.1093/nar/gkaf1040
+- For ITS, the UNITE reference. Abarenkov K *et al.* *The UNITE database for
+  molecular identification and taxonomic communication of fungi and other
+  eukaryotes: sequences, taxa and classifications reconsidered.* Nucleic Acids
+  Research 52, D791–D797 (2024). doi:10.1093/nar/gkad1039
 - For 16S, cutadapt trims the primers. Martin M. *Cutadapt removes adapter
   sequences from high-throughput sequencing reads.* EMBnet.journal 17, 10–12 (2011).
   doi:10.14806/ej.17.1.200
