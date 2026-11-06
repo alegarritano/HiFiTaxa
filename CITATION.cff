@@ -3,8 +3,8 @@ message: "If you use HiFiTaxa, please cite the preprint (preferred-citation) and
 title: "HiFiTaxa: a reproducible analysis pipeline for full length 16S rRNA gene and ITS amplicon sequencing from PacBio reads"
 abstract: "A single command Nextflow pipeline from raw PacBio HiFi reads to taxonomy for the full length 16S rRNA gene (GTDB) and the fungal ITS region (UNITE), with references rebuilt from the current releases and the classifiers BLCA, DADA2 naive Bayes, Emu (16S) and EMITS (ITS). The benchmark harness and the scoring and figure code of the manuscript are in https://github.com/alegarritano/HiFiTaxa_analysis."
 authors:
-  - family-names: Garritano
-    given-names: Alessandro N.
+  - family-names: "N. Garritano"
+    given-names: Alessandro
     orcid: "https://orcid.org/0000-0002-8159-5178"
 version: 1.0.0
 date-released: 2026-10-31
@@ -14,8 +14,8 @@ preferred-citation:
   type: article
   title: "HiFiTaxa: a reproducible analysis pipeline for full length 16S rRNA gene and ITS amplicon sequencing from PacBio reads"
   authors:
-    - family-names: Garritano
-      given-names: Alessandro N.
+    - family-names: "N. Garritano"
+      given-names: Alessandro
       orcid: "https://orcid.org/0000-0002-8159-5178"
     - family-names: Modolon
       given-names: Fluvio
