@@ -262,7 +262,7 @@ log_text = """
 // author lists and DOIs are in CITATION.cff and README.md (References and what
 // to cite). Keep the three files in step when a reference changes.
 def REFS = [
-    hifitaxa: "Garritano AN. HiFiTaxa v${workflow.manifest.version}. https://github.com/alegarritano/HiFiTaxa (see CITATION.cff)",
+    hifitaxa: "Garritano AN, Modolon F, Warren CR (2026) HiFiTaxa: a reproducible analysis pipeline for full length 16S rRNA gene and ITS amplicon sequencing from PacBio reads. bioRxiv. doi:10.64898/2026.11.03.763332",
     nextflow: "Di Tommaso P et al. (2017) Nextflow enables reproducible computational workflows. Nat Biotechnol 35:316-319. doi:10.1038/nbt.3820",
     seqkit:   "Shen W et al. (2016) SeqKit: a cross-platform and ultrafast toolkit for FASTA/Q file manipulation. PLOS ONE 11:e0163962. doi:10.1371/journal.pone.0163962",
     cutadapt: "Martin M (2011) Cutadapt removes adapter sequences from high-throughput sequencing reads. EMBnet.journal 17:10-12. doi:10.14806/ej.17.1.200",
@@ -286,7 +286,8 @@ def REFS = [
 // that qiime dada2 denoise-ccs runs (for ITS as well as 16S).
 def citation_text = { boolean its, boolean reads, boolean trim, boolean asvs, boolean blca, boolean nb, boolean em ->
     def rows = []
-    rows << ['HiFiTaxa', 'the pipeline', REFS.hifitaxa]
+    // the pipeline itself, cited on its label line with no role text
+    rows << ['HiFiTaxa', REFS.hifitaxa, []]
     rows << ['Nextflow', 'workflow engine', REFS.nextflow]
     if (reads)                 rows << ['seqkit',   'read QC, quality and length filtering', REFS.seqkit]
     if (reads && its)          rows << ['ITSxRust', 'ITS extraction from the QC reads', REFS.itsxrust]

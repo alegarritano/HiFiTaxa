@@ -250,14 +250,16 @@ write standalone files (safe to keep after `work/` is cleaned).
 
 ## References and what to cite
 
-If you use HiFiTaxa, please cite this repository (`CITATION.cff`, which holds the
-full author lists and DOIs of every entry below) together with the tools and
-references your run used. Which ones depends on the marker and the classifiers,
-so every successful run prints the list for its own settings at the end and
-writes it to `<outdir>/CITATIONS.txt`. As a guide:
+If you use HiFiTaxa, please cite the preprint (the first entry below) together with
+the tools and references your run used. Which ones depends on the marker and the
+classifiers, so every successful run prints the list for its own settings at the
+end and writes it to `<outdir>/CITATIONS.txt`. `CITATION.cff` holds the full
+author lists and DOIs of every entry. As a guide:
 
 Every run:
-- HiFiTaxa itself (`CITATION.cff`).
+- Garritano AN, Modolon F, Warren CR. *HiFiTaxa: a reproducible analysis pipeline
+  for full length 16S rRNA gene and ITS amplicon sequencing from PacBio reads.*
+  bioRxiv (2026). doi:10.64898/2026.11.03.763332
 - Nextflow. Di Tommaso P *et al.* *Nextflow enables reproducible computational
   workflows.* Nature Biotechnology 35, 316–319 (2017). doi:10.1038/nbt.3820
 - seqkit, read QC and length filtering. Shen W *et al.* *SeqKit: a cross-platform
@@ -315,9 +317,11 @@ The pipeline code is MIT (see `LICENSE`). Bundled components keep their own
 licences, reproduced in `THIRD_PARTY_NOTICES.md`: the BLCA script
 (`bin/blca_main.py`, GNU licence as stated by its authors, with the two
 modifications listed there) and the QC and denoise modules adapted from PacBio's
-HiFi-16S-workflow (BSD-3-Clause-Clear). If you use HiFiTaxa, please cite this repo
-(`CITATION.cff`) and the tools your run used; the section above says which paper
-goes with which module, and every run prints the list for its own settings.
+HiFi-16S-workflow (BSD-3-Clause-Clear). If you use HiFiTaxa, please cite the
+preprint (Garritano AN, Modolon F, Warren CR, bioRxiv 2026,
+doi:10.64898/2026.11.03.763332, also in `CITATION.cff`) and the tools your run
+used. The section above says which paper goes with which module, and every run
+prints the list for its own settings.
 
 The benchmark harness (Gadi job scripts, holdout splitters, mock exclusion lists)
 and the scoring and figure code of the manuscript live in their own repository,
